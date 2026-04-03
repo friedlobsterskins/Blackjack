@@ -17,6 +17,9 @@
   --success: #22c55e;
   --card: #fcfcfb;
   --table-scale: 1;
+  --payout-scale: 1;
+  --payout-design-width: 560px;
+  --payout-design-height: 700px;
 }
 
 * {
@@ -666,44 +669,123 @@ input {
   min-height: calc(100dvh - 84px);
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.payout-shell {
+  width: calc(var(--payout-design-width) * var(--payout-scale));
+  height: calc(var(--payout-design-height) * var(--payout-scale));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 
 .payout-widget {
-  width: min(500px, 100%);
-  padding: 38px 34px;
+  width: var(--payout-design-width);
+  padding: 34px 28px 28px;
   text-align: center;
   border-radius: 22px;
   background: rgba(12, 23, 36, 0.94);
   border: 1px solid rgba(240, 207, 115, 0.14);
   box-shadow: 0 20px 34px rgba(0, 0, 0, 0.26);
+  transform: scale(var(--payout-scale));
+  transform-origin: top center;
 }
 
 .payout-widget h2 {
-  margin: 0 0 10px;
+  margin: 0 0 16px;
   letter-spacing: 0.08em;
+  font-size: 34px;
 }
 
 .payout-widget p {
   margin: 0;
   color: var(--muted);
+  line-height: 1.5;
+  font-size: 16px;
+}
+
+.payout-submodes {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(17, 31, 47, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 16px;
+}
+
+.payout-submodes button {
+  min-width: 170px;
+  height: 50px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: none;
+  background: transparent;
+  color: #b6c4d2;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.payout-submodes button.active {
+  background: linear-gradient(180deg, #f7dc87 0%, #deb74b 100%);
+  color: #08121d;
+}
+
+.payout-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 20px;
+}
+
+.meta-pill {
+  padding: 12px 10px;
+  border-radius: 16px;
+  background: rgba(24, 40, 59, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.meta-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.meta-pill strong {
+  display: block;
+  color: white;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.payout-widget.random-mode .payout-meta {
+  display: none;
 }
 
 .bet-amount {
   margin: 24px 0 20px;
-  font-size: 64px;
+  font-size: 74px;
   font-weight: 900;
   color: var(--success);
 }
 
 #payout-input {
-  width: 180px;
-  height: 58px;
-  border-radius: 14px;
+  width: 190px;
+  height: 62px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: #18283b;
   color: white;
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 900;
   text-align: center;
   outline: none;
@@ -714,6 +796,11 @@ input {
   box-shadow: 0 0 0 4px rgba(240, 207, 115, 0.12);
 }
 
+#payout-input:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
 .feedback-text {
   min-height: 30px;
   margin-top: 14px;
@@ -722,14 +809,27 @@ input {
 }
 
 .streak-counter {
-  margin-top: 22px;
+  margin-top: 20px;
   color: var(--muted);
+  font-size: 15px;
 }
 
 #payout-streak {
   color: white;
   font-weight: 900;
   font-size: 22px;
+}
+
+.sprint-hint {
+  display: none;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.payout-widget.random-mode .sprint-hint {
+  display: none !important;
 }
 
 /* ---------- RESPONSIVE ---------- */
@@ -774,7 +874,7 @@ input {
 @media (max-width: 640px) {
   #game-mode,
   #payout-mode {
-    padding: 14px;
+    padding: 12px;
   }
 
   .tabs {
