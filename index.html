@@ -14,6 +14,16 @@
         <h1>♠️ CASINO LAC-LEAMY</h1>
         <span>DEALER DRILL PRO</span>
     </div>
+
+    <!-- THE NEW ELEGANT SOLUTION: DASHBOARD CONSOLE -->
+    <div id="center-console">
+        <button id="deal-btn" onclick="startRound()">DEAL NEW ROUND</button>
+        <div id="action-hud" class="hud-hidden">
+            <span id="hud-title">SPOT 1 TOTAL</span>
+            <input type="number" id="hud-input" autocomplete="off" />
+        </div>
+    </div>
+
     <div class="tabs">
         <button id="tab-game" class="active" onclick="switchTab('game')">Live Table</button>
         <button id="tab-payout" onclick="switchTab('payout')">3:2 Payouts</button>
@@ -22,7 +32,6 @@
 
 <main id="game-mode">
     <div class="table-container">
-        <!-- Wood/Leather Rail -->
         <div class="table-rail">
             <div class="table-felt">
                 
@@ -37,16 +46,6 @@
                         <div class="status-text" id="dealer-status"></div>
                     </div>
                 </div>
-
-                <!-- HUD Prompt (Overlay) -->
-                <div id="action-hud" class="hud-hidden">
-                    <h2 id="hud-title">SPOT 1 TOTAL</h2>
-                    <p id="hud-subtitle">Aces count optimally</p>
-                    <input type="number" id="hud-input" autocomplete="off" />
-                </div>
-
-                <!-- Deal Button -->
-                <button id="deal-btn" onclick="startRound()">DEAL NEW ROUND</button>
 
                 <!-- Player Area -->
                 <div class="players-arc" id="players-arc">
