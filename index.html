@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dealer Drill - Blackjack Trainer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>🃏 Dealer Drill: Blackjack Trainer</h1>
+      <div class="chips">Lac-Leamy style practice • Dealer perspective</div>
+    </header>
+
+    <main>
+      <section class="mode-tabs">
+        <button id="modeGame" class="active">Table Mode</button>
+        <button id="modePayout">3:2 Payout Mode</button>
+      </section>
+
+      <section id="ruleNotice" class="notice"></section>
+
+      <section id="gameMode">
+        <div class="table-wrap">
+          <div class="dealer-area">
+            <h2>Dealer Hand</h2>
+            <div id="dealerCards" class="card-row"></div>
+            <div id="dealerResult" class="result"></div>
+          </div>
+
+          <div id="playersArea" class="players"></div>
+        </div>
+
+        <div class="controls">
+          <button id="newRound">Deal New Round</button>
+          <button id="checkTotals">Check My Totals</button>
+        </div>
+
+        <section class="input-zone">
+          <h3>Your Totals (Dealer Training)</h3>
+          <div id="totalInputs"></div>
+          <div id="feedback" class="feedback"></div>
+        </section>
+      </section>
+
+      <section id="payoutMode" class="hidden">
+        <h2>3:2 Blackjack Payout Drill</h2>
+        <p>Type the payout for a random bet (1 to 50). Example: bet 10 → payout 15.</p>
+        <div class="payout-card">
+          <div id="betPrompt" class="bet-prompt">Bet: --</div>
+          <input id="payoutInput" type="number" step="0.5" placeholder="Your 3:2 payout" />
+          <div class="row">
+            <button id="checkPayout">Check</button>
+            <button id="nextPayout">Next Bet</button>
+          </div>
+          <div id="payoutFeedback" class="feedback"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
