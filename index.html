@@ -1,73 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lac-Leamy Dealer Pro Trainer</title>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lac-Leamy Dealer Trainer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-
-<header>
-    <div class="logo">
-        <h1>♠️ CASINO LAC-LEAMY</h1>
-        <span>DEALER DRILL PRO</span>
+  <header class="topbar">
+    <div class="brand">
+      <h1>CASINO LAC-LEAMY</h1>
+      <span>Dealer trainer</span>
     </div>
 
-    <!-- THE NEW ELEGANT SOLUTION: DASHBOARD CONSOLE -->
-    <div id="center-console">
-        <button id="deal-btn" onclick="startRound()">DEAL NEW ROUND</button>
-        <div id="action-hud" class="hud-hidden">
+    <div class="topbar-center">
+      <div id="center-console">
+        <button id="deal-btn" onclick="startRound()">Deal round</button>
+
+        <div id="action-hud" class="hud-hidden" aria-live="polite">
+          <div class="hud-text">
+            <span class="hud-kicker">Call total</span>
             <span id="hud-title">SPOT 1 TOTAL</span>
-            <input type="number" id="hud-input" autocomplete="off" />
+          </div>
+          <input type="number" id="hud-input" autocomplete="off" inputmode="numeric" />
         </div>
+      </div>
     </div>
 
     <div class="tabs">
-        <button id="tab-game" class="active" onclick="switchTab('game')">Live Table</button>
-        <button id="tab-payout" onclick="switchTab('payout')">3:2 Payouts</button>
+      <button id="tab-game" class="active" onclick="switchTab('game')">Live Table</button>
+      <button id="tab-payout" onclick="switchTab('payout')">3:2 Payouts</button>
     </div>
-</header>
+  </header>
 
-<main id="game-mode">
-    <div class="table-container">
-        <div class="table-rail">
-            <div class="table-felt">
-                
-                <!-- Dealer Area -->
-                <div class="dealer-area">
-                    <div class="chip-tray">
-                        <div class="tray-column"></div><div class="tray-column"></div>
-                        <div class="tray-column"></div><div class="tray-column"></div>
-                    </div>
-                    <div id="dealer-spot" class="spot">
-                        <div class="hand" id="dealer-hand"></div>
-                        <div class="status-text" id="dealer-status"></div>
-                    </div>
-                </div>
+  <main id="game-mode">
+    <div class="table-shell" id="table-shell">
+      <div class="table-rail">
+        <div class="table-felt">
+          <div class="table-glow"></div>
 
-                <!-- Player Area -->
-                <div class="players-arc" id="players-arc">
-                    <!-- Populated by Javascript -->
-                </div>
-
+          <section class="dealer-zone">
+            <div class="dealer-caption">Dealer</div>
+            <div id="dealer-spot" class="spot dealer-spot">
+              <div class="hand" id="dealer-hand"></div>
+              <div class="status-text" id="dealer-status"></div>
             </div>
+          </section>
+
+          <section class="table-copy">
+            <div class="felt-text">BLACKJACK PAYS 3 TO 2</div>
+            <div class="felt-text subtle">INSURANCE PAYS 2 TO 1</div>
+          </section>
+
+          <section class="players-row" id="players-arc"></section>
         </div>
+      </div>
     </div>
-</main>
+  </main>
 
-<main id="payout-mode" style="display: none;">
+  <main id="payout-mode" style="display: none;">
     <div class="payout-widget">
-        <h2>💰 BLACKJACK PAYOUT DRILL</h2>
-        <p>Enter the 3:2 payout for the bet below.</p>
-        <div class="bet-amount">$<span id="payout-bet"></span></div>
-        <input type="number" id="payout-input" step="0.5" placeholder="0.00" />
-        <div id="payout-feedback" class="feedback-text"></div>
-        <div class="streak-counter">Current Streak: <span id="payout-streak">0</span> 🔥</div>
+      <h2>BLACKJACK PAYOUT</h2>
+      <p>Enter the correct 3:2 payout for the bet below.</p>
+      <div class="bet-amount">$<span id="payout-bet"></span></div>
+      <input type="number" id="payout-input" step="0.5" placeholder="0.00" />
+      <div id="payout-feedback" class="feedback-text"></div>
+      <div class="streak-counter">Current streak: <span id="payout-streak">0</span> 🔥</div>
     </div>
-</main>
+  </main>
 
-<script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
