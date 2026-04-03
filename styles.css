@@ -1,5 +1,5 @@
 :root {
-  --gold: #d4af37;
+  --gold: #facc15;
   --dark-bg: #0f172a;
   --table-green: #0a4f2c;
   --rail-brown: #2d1606;
@@ -14,154 +14,159 @@ body {
   background-color: var(--dark-bg);
   color: white;
   user-select: none;
-  overflow: hidden;
+  overflow: hidden; 
 }
 
+/* --- HEADER / CONTROL DASHBOARD --- */
 header {
   background: #1e293b;
-  padding: 15px 40px;
+  padding: 0 30px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 3px solid var(--gold);
+  border-bottom: 2px solid var(--gold);
   box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-}
-
-.logo h1 { margin: 0; font-size: 20px; font-weight: 900; color: var(--gold); }
-.logo span { font-size: 12px; letter-spacing: 2px; color: #94a3b8; }
-
-.tabs button {
-  background: #334155; color: white; border: none; padding: 10px 24px;
-  font-size: 14px; font-weight: 700; border-radius: 8px; cursor: pointer;
-  transition: all 0.2s; margin-left: 10px;
-}
-.tabs button.active { background: var(--gold); color: #000; box-shadow: 0 0 10px var(--gold); }
-
-/* Table Graphics */
-#game-mode {
-  display: flex; justify-content: center; align-items: flex-end;
-  height: calc(100vh - 80px); padding-bottom: 20px;
-}
-
-.table-container {
-  width: 1200px; height: 650px;
-  display: flex; justify-content: center; align-items: flex-end;
-}
-
-.table-rail {
-  width: 100%; height: 100%;
-  background: var(--rail-brown);
-  border-radius: 600px 600px 30px 30px;
-  padding: 25px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 5px 15px rgba(255,255,255,0.1);
-}
-
-.table-felt {
-  width: 100%; height: 100%;
-  background: radial-gradient(circle at top, #137745, var(--table-green));
-  border-radius: 580px 580px 20px 20px;
-  box-shadow: inset 0 0 80px rgba(0,0,0,0.8);
+  height: 75px;
+  box-sizing: border-box;
   position: relative;
-  display: flex; flex-direction: column; align-items: center;
+  z-index: 1000;
 }
 
-/* Dealer Elements */
-.chip-tray {
-  width: 350px; height: 50px; background: #111;
-  border: 3px solid #333; border-top: none;
-  border-radius: 0 0 15px 15px; margin: 0 auto 30px auto;
-  display: flex; gap: 8px; padding: 8px;
-}
-.tray-column { flex: 1; background: #222; border-radius: 20px; box-shadow: inset 0 5px 10px rgba(0,0,0,0.8); }
+.logo { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.logo h1 { margin: 0; font-size: 20px; font-weight: 900; color: var(--gold); }
+.logo span { font-size: 11px; letter-spacing: 2px; color: #94a3b8; }
 
-.spot { display: flex; flex-direction: column; align-items: center; position: relative; transition: 0.4s ease; }
-#dealer-spot { margin-top: 10px; min-height: 120px; }
-.status-text { margin-top: 15px; font-weight: 800; color: var(--gold); font-size: 18px; text-transform: uppercase; }
-
-/* Players Arc */
-.players-arc {
-  width: 85%; display: flex; justify-content: space-between; align-items: flex-end;
-  position: absolute; bottom: 50px;
+.tabs { flex: 1; display: flex; justify-content: flex-end; }
+.tabs button {
+  background: #334155; color: white; border: none; padding: 10px 20px;
+  font-size: 14px; font-weight: 700; border-radius: 8px; cursor: pointer;
+  transition: 0.2s; margin-left: 10px;
 }
-.player-spot { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.tabs button.active { background: var(--gold); color: #000; box-shadow: 0 0 10px rgba(250,204,21,0.5); }
 
-/* Betting Chips */
-.bet-area {
-  width: 80px; height: 80px; border: 2px solid rgba(255,255,255,0.2);
-  border-radius: 50%; display: flex; justify-content: center; align-items: center;
-}
-.chip {
-  width: 50px; height: 50px; border-radius: 50%;
-  border: 5px dashed white; display: flex; justify-content: center; align-items: center;
-  font-weight: 900; font-size: 14px; box-shadow: 2px 4px 6px rgba(0,0,0,0.5); z-index: 5;
+/* Central Dashboard UI */
+#center-console {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-/* Cards & Animations */
-.hand { display: flex; justify-content: center; align-items: center; min-height: 110px; }
-.card {
-  width: 75px; height: 110px; background: var(--card-white); border-radius: 8px;
-  box-shadow: -3px 3px 10px rgba(0,0,0,0.5); border: 1px solid #ccc;
-  display: flex; flex-direction: column; justify-content: center; align-items: center;
-  font-size: 26px; font-weight: 900; color: #000; position: relative;
-  /* Deal Animation */
-  animation: dealCard 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+#deal-btn {
+  background: linear-gradient(135deg, var(--gold), #b89324); color: #000;
+  font-size: 16px; font-weight: 900; padding: 10px 30px; border-radius: 50px;
+  border: none; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: 0.2s;
+  letter-spacing: 1px;
 }
-.card + .card { margin-left: -45px; } /* Fanning */
-.card.red { color: #dc2626; }
-.card.hidden { background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 10px, white 10px, white 12px); }
-.card-mini { position: absolute; top: 5px; left: 8px; font-size: 16px; }
-.card.sideways { transform: rotate(-90deg) translateX(20px) translateY(20px); z-index: 10; margin-left: -20px; }
+#deal-btn:hover { transform: scale(1.05); }
 
-@keyframes dealCard {
-  from { opacity: 0; transform: translateY(-200px) scale(0.5); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Spotlights */
-.dimmed { opacity: 0.3; filter: blur(3px); }
-.spotlight { transform: scale(1.15) translateY(-20px); filter: drop-shadow(0 0 25px var(--gold)); z-index: 20; }
-
-/* HUD / Prompt UI */
 #action-hud {
-  position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
-  background: rgba(15, 23, 42, 0.95); padding: 30px 50px; border-radius: 16px;
-  border: 2px solid var(--gold); text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,0.9);
-  z-index: 100; backdrop-filter: blur(5px);
+  background: #0f172a; padding: 6px 20px; border-radius: 50px;
+  border: 2px solid var(--gold); display: flex; align-items: center; gap: 15px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.5), 0 4px 15px rgba(0,0,0,0.4);
 }
-.hud-hidden { display: none; }
-#hud-title { color: var(--gold); margin: 0 0 5px 0; font-size: 26px; }
-#hud-subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 20px; }
+#action-hud.hud-hidden { display: none; }
+#hud-title { color: var(--gold); font-size: 16px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
 #hud-input {
-  background: #1e293b; color: white; border: 2px solid #475569;
-  font-size: 40px; font-weight: 900; width: 120px; text-align: center;
-  padding: 10px; border-radius: 12px; outline: none; transition: 0.2s;
+  background: #1e293b; color: white; border: 1px solid #475569;
+  font-size: 24px; font-weight: 900; width: 60px; text-align: center;
+  padding: 4px; border-radius: 8px; outline: none; transition: 0.2s;
 }
-#hud-input:focus { border-color: var(--gold); }
+#hud-input:focus { border-color: var(--gold); box-shadow: 0 0 10px rgba(250,204,21,0.4); }
 .error-shake { animation: shake 0.4s; border-color: var(--alert-red) !important; background: #450a0a !important; }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  25%, 75% { transform: translateX(-10px); }
-  50% { transform: translateX(10px); }
+  25%, 75% { transform: translateX(-8px); }
+  50% { transform: translateX(8px); }
 }
 
-#deal-btn {
-  position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
-  background: linear-gradient(135deg, var(--gold), #b89324); color: #000;
-  font-size: 22px; font-weight: 900; padding: 18px 40px; border-radius: 50px;
-  border: none; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.5); transition: 0.2s;
+/* --- TABLE GRAPHICS --- */
+#game-mode {
+  display: flex; justify-content: center; align-items: center;
+  height: calc(100vh - 75px); padding: 20px; box-sizing: border-box;
 }
-#deal-btn:hover { transform: translate(-50%, -52%) scale(1.05); }
 
-/* Payout Drill Mode */
-#payout-mode { display: flex; justify-content: center; align-items: center; height: calc(100vh - 80px); }
+.table-container { width: 100%; max-width: 1100px; height: 100%; max-height: 600px; position: relative; }
+.table-rail {
+  width: 100%; height: 100%; background: var(--rail-brown);
+  border-radius: 50% 50% 15px 15px / 30% 30% 15px 15px;
+  padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 5px 15px rgba(255,255,255,0.1);
+  box-sizing: border-box;
+}
+.table-felt {
+  width: 100%; height: 100%;
+  background: radial-gradient(circle at top, #147a4c, var(--table-green));
+  border-radius: 50% 50% 8px 8px / 30% 30% 8px 8px;
+  box-shadow: inset 0 0 80px rgba(0,0,0,0.8); position: relative;
+}
+
+/* Dealer Elements */
+.dealer-area {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; width: 100%;
+}
+.chip-tray {
+  width: 280px; height: 35px; background: #111; border: 3px solid #333; border-top: none;
+  border-radius: 0 0 15px 15px; margin-bottom: 20px; display: flex; gap: 8px; padding: 6px;
+}
+.tray-column { flex: 1; background: #222; border-radius: 20px; box-shadow: inset 0 3px 8px rgba(0,0,0,0.8); }
+.spot { display: flex; flex-direction: column; align-items: center; position: relative; transition: 0.4s ease; }
+#dealer-spot { min-height: 110px; }
+.status-text { margin-top: 10px; font-weight: 800; color: var(--gold); font-size: 16px; text-transform: uppercase; }
+
+/* Players Arc */
+.players-arc {
+  width: 90%; display: flex; justify-content: space-around; align-items: flex-end;
+  position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+}
+.player-spot { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+.bet-area {
+  width: 70px; height: 70px; border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 50%; display: flex; justify-content: center; align-items: center;
+}
+.chip {
+  width: 45px; height: 45px; border-radius: 50%; border: 4px dashed white;
+  display: flex; justify-content: center; align-items: center; font-weight: 900;
+  font-size: 13px; box-shadow: 2px 3px 5px rgba(0,0,0,0.5); z-index: 5;
+  color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+/* Cards */
+.hand { display: flex; justify-content: center; align-items: center; min-height: 100px; }
+.card {
+  width: 65px; height: 95px; background: var(--card-white); border-radius: 6px;
+  box-shadow: -2px 3px 8px rgba(0,0,0,0.4); border: 1px solid #cbd5e1;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  color: #0f172a; position: relative; font-family: Arial, sans-serif; transition: transform 0.2s;
+}
+.card.animate-new { animation: dropIn 0.3s ease-out forwards; }
+.card + .card { margin-left: -35px; } /* Fanning */
+.card.red { color: #dc2626; }
+.card.hidden { background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 10px, white 10px, white 12px); }
+.card-mini { position: absolute; top: 4px; left: 6px; font-size: 13px; font-weight: bold; letter-spacing: -1px; }
+.card-val { font-size: 28px; font-weight: 900; letter-spacing: -2px; }
+.card.sideways { transform: rotate(-90deg) translateX(15px) translateY(15px); z-index: 10; margin-left: -15px; }
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-30px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Spotlights */
+.dimmed { opacity: 0.3; filter: blur(2px); }
+.spotlight { transform: scale(1.15) translateY(-15px); filter: drop-shadow(0 0 20px var(--gold)); z-index: 20; }
+
+/* --- PAYOUT DRILL MODE --- */
+#payout-mode { display: flex; justify-content: center; align-items: center; height: calc(100vh - 75px); }
 .payout-widget {
-  background: #1e293b; padding: 50px 70px; border-radius: 20px;
+  background: #1e293b; padding: 40px 60px; border-radius: 16px;
   text-align: center; border: 1px solid #334155; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
 }
 .payout-widget h2 { color: var(--gold); margin-top: 0; }
-.bet-amount { font-size: 80px; font-weight: 900; color: var(--success-green); margin: 20px 0; }
-#payout-input { font-size: 40px; text-align: center; width: 220px; padding: 15px; border-radius: 12px; border: none; background: #0f172a; color: white; }
-.feedback-text { height: 35px; font-size: 22px; font-weight: bold; margin-top: 15px; }
-.streak-counter { margin-top: 30px; font-size: 18px; color: #94a3b8; }
-#payout-streak { color: white; font-weight: bold; font-size: 24px; margin-left: 10px; }
+.bet-amount { font-size: 60px; font-weight: 900; color: var(--success-green); margin: 20px 0; }
+#payout-input { font-size: 35px; text-align: center; width: 180px; padding: 12px; border-radius: 10px; border: none; background: #0f172a; color: white; outline: none; }
+#payout-input:focus { border: 2px solid var(--gold); }
+.feedback-text { height: 30px; font-size: 20px; font-weight: bold; margin-top: 15px; }
+.streak-counter { margin-top: 25px; font-size: 16px; color: #94a3b8; }
+#payout-streak { color: white; font-weight: bold; font-size: 22px; margin-left: 10px; }
