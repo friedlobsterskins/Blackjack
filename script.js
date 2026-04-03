@@ -1,5 +1,4 @@
-// --- DECK & RULES ---
-const suits =['♠', '♥', '♦', '♣'];
+const suits = ['♠', '♥', '♦', '♣'];
 const ranks =['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 let deck = [];
 let players =[];
@@ -9,8 +8,8 @@ let currentExpectedTotal = 0;
 let actionCallback = null;
 let activePlayerIdx = -1;
 let activeHandIdx = -1;
+let roundActive = false; 
 
-// Sleep function for realistic pacing
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function buildDeck() {
@@ -22,7 +21,7 @@ function buildDeck() {
     }
     for (let i = deck.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
+        [deck[i], deck[j]] =[deck[j], deck[i]];
     }
 }
 
@@ -39,37 +38,32 @@ function getBestTotal(hand) {
     return total;
 }
 
-// --- BOT BASIC STRATEGY ---
 function botAction(hand, dealerUpVal) {
     let total = getBestTotal(hand);
     let hasAce = hand.some(c => c.rank === 'A');
     let hardTotal = hand.reduce((sum, c) => sum + (c.rank === 'A' ? 1 : getVal(c.rank)), 0);
     let isSoft = hasAce && (hardTotal + 10 <= 21);
 
-    // Double Downs (10 or 11 vs 2-9)
     if (hand.length === 2 && (total === 10 || total === 11) && dealerUpVal >= 2 && dealerUpVal <= 9) return 'DOUBLE';
 
     if (total <= 11) return 'HIT';
     if (total >= 17 && !isSoft) return 'STAND';
-    
     if (isSoft) {
         if (total <= 17) return 'HIT';
-        if (total === 18 && [9, 10, 11].includes(dealerUpVal)) return 'HIT';
+        if (total === 18 &&[9, 10, 11].includes(dealerUpVal)) return 'HIT';
         return 'STAND';
     }
-
     if (total === 12 && dealerUpVal >= 4 && dealerUpVal <= 6) return 'STAND';
     if (total >= 13 && total <= 16 && dealerUpVal >= 2 && dealerUpVal <= 6) return 'STAND';
     
     return 'HIT';
 }
 
-// --- UI RENDERING ---
 function getChipColor(amt) {
-    if(amt >= 100) return '#171717'; // Black
-    if(amt >= 25) return '#22c55e';  // Green
-    if(amt >= 5) return '#ef4444';   // Red
-    return '#3b82f6';                // Blue
+    if(amt >= 100) return '#171717';
+    if(amt >= 25) return '#22c55e';
+    if(amt >= 5) return '#ef4444';
+    return '#3b82f6';
 }
 
 function renderTable() {
@@ -77,11 +71,12 @@ function renderTable() {
     const dHand = document.getElementById('dealer-hand');
     dHand.innerHTML = '';
     dealer.hand.forEach((c, i) => {
+        let isNewest = (i === dealer.hand.length - 1 && dealer.hand.length > 2) ? 'animate-new' : '';
         if (i === 1 && !dealer.isRevealed) {
-            dHand.innerHTML += `<div class="card hidden"></div>`;
+            dHand.innerHTML += `<div class="card hidden ${isNewest}"></div>`;
         } else {
-            let color =['♥','♦'].includes(c.suit) ? 'red' : '';
-            dHand.innerHTML += `<div class="card ${color}"><div class="card-mini">${c.rank}${c.suit}</div>${c.rank}</div>`;
+            let color = ['♥','♦'].includes(c.suit) ? 'red' : '';
+            dHand.innerHTML += `<div class="card ${color} ${isNewest}"><span class="card-mini">${c.rank}${c.suit}</span><span class="card-val">${c.rank}</span></div>`;
         }
     });
 
@@ -97,7 +92,9 @@ function renderTable() {
             let cardsHtml = h.cards.map((c, i) => {
                 let color = ['♥','♦'].includes(c.suit) ? 'red' : '';
                 let sideway = (h.isDouble && i === 2) ? 'sideways' : '';
-                return `<div class="card ${color} ${sideway}"><div class="card-mini">${c.rank}${c.suit}</div>${c.rank}</div>`;
+                let isNewest = (i === h.cards.length - 1 && h.cards.length > 2) ? 'animate-new' : '';
+                
+                return `<div class="card ${color} ${sideway} ${isNewest}"><span class="card-mini">${c.rank}${c.suit}</span><span class="card-val">${c.rank}</span></div>`;
             }).join('');
             
             spotHtml += `<div class="hand ${stateClass}">${cardsHtml}</div>`;
@@ -119,23 +116,23 @@ function renderTable() {
     }
 }
 
-// --- HUD & INPUT ---
 const hud = document.getElementById('action-hud');
 const hudTitle = document.getElementById('hud-title');
 const hudInput = document.getElementById('hud-input');
 
 function promptDealer(expected, title, callback) {
+    if (!roundActive) return; 
     currentExpectedTotal = expected;
     actionCallback = callback;
     hudTitle.innerText = title;
     hud.classList.remove('hud-hidden');
     hudInput.value = '';
     hudInput.classList.remove('error-shake');
-    setTimeout(() => hudInput.focus(), 50);
+    setTimeout(() => { if (roundActive) hudInput.focus(); }, 50);
 }
 
 hudInput.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && roundActive) {
         let val = parseInt(hudInput.value);
         if (val === currentExpectedTotal) {
             hud.classList.add('hud-hidden');
@@ -149,8 +146,8 @@ hudInput.addEventListener('keypress', function(e) {
     }
 });
 
-// --- GAME LOOP ---
 async function startRound() {
+    roundActive = true;
     if(deck.length < 50) buildDeck();
     document.getElementById('deal-btn').style.display = 'none';
     document.getElementById('dealer-status').innerText = '';
@@ -163,17 +160,21 @@ async function startRound() {
     }));
     dealer = { hand:[], isRevealed: false };
 
-    // Deal Sequence
     renderTable();
     for(let i=0; i<2; i++) {
-        for(let p of players) { p.hands[0].cards.push(deck.pop()); await sleep(150); renderTable(); }
+        for(let p of players) { 
+            if(!roundActive) return;
+            p.hands[0].cards.push(deck.pop()); await sleep(150); renderTable(); 
+        }
+        if(!roundActive) return;
         dealer.hand.push(deck.pop()); await sleep(150); renderTable();
     }
     
-    setTimeout(() => playHand(0, 0), 400);
+    if(roundActive) setTimeout(() => playHand(0, 0), 300);
 }
 
 async function playHand(pIdx, hIdx) {
+    if (!roundActive) return;
     if (pIdx >= players.length) return playDealer();
 
     activePlayerIdx = pIdx; activeHandIdx = hIdx;
@@ -184,21 +185,20 @@ async function playHand(pIdx, hIdx) {
     let total = getBestTotal(cards);
     let upCardVal = getVal(dealer.hand[0].rank);
 
-    // Initial Blackjack
     if (cards.length === 2 && total === 21) {
         promptDealer(21, `SPOT ${pIdx+1} BLACKJACK`, () => nextHand(pIdx, hIdx));
         return;
     }
 
     promptDealer(total, `SPOT ${pIdx+1} TOTAL`, async () => {
+        if (!roundActive) return;
         if (total >= 21 || handObj.isDouble) return nextHand(pIdx, hIdx);
 
-        // Splitting (8s and Aces)
-        if (cards.length === 2 && cards[0].rank === cards[1].rank && ['8','A'].includes(cards[0].rank)) {
+        if (cards.length === 2 && cards[0].rank === cards[1].rank &&['8','A'].includes(cards[0].rank)) {
             let isAces = cards[0].rank === 'A';
             players[pIdx].hands = [{ cards: [cards[0]], isDouble: false }, { cards: [cards[1]], isDouble: false }];
             
-            if(isAces) { // Split Aces gets 1 card each
+            if(isAces) {
                 players[pIdx].hands[0].cards.push(deck.pop());
                 players[pIdx].hands[1].cards.push(deck.pop());
                 renderTable();
@@ -206,9 +206,9 @@ async function playHand(pIdx, hIdx) {
                     activeHandIdx = 1; renderTable();
                     promptDealer(getBestTotal(players[pIdx].hands[1].cards), "SPLIT ACE 2", () => nextHand(pIdx, 1));
                 });
-            } else { // Play out 8s
+            } else {
                 players[pIdx].hands[0].cards.push(deck.pop());
-                await sleep(300); playHand(pIdx, 0);
+                await sleep(250); playHand(pIdx, 0);
             }
             return;
         }
@@ -220,16 +220,16 @@ async function playHand(pIdx, hIdx) {
             handObj.isDouble = true;
             handObj.cards.push(deck.pop());
             renderTable();
-            await sleep(400);
+            await sleep(300);
             promptDealer(getBestTotal(handObj.cards), `SPOT ${pIdx+1} DOUBLE DOWN`, () => nextHand(pIdx, hIdx));
         } 
         else if (action === 'HIT') {
             handObj.cards.push(deck.pop());
             renderTable();
             await sleep(200);
-            playHand(pIdx, hIdx); // Recurse to ask for new total
+            playHand(pIdx, hIdx); 
         } 
-        else { // STAND
+        else {
             nextHand(pIdx, hIdx);
         }
     });
@@ -241,11 +241,13 @@ function nextHand(pIdx, hIdx) {
 }
 
 function playDealer() {
+    if (!roundActive) return;
     activePlayerIdx = 'dealer'; activeHandIdx = -1;
     dealer.isRevealed = true;
     renderTable();
 
     function dealerStep() {
+        if (!roundActive) return;
         let total = getBestTotal(dealer.hand);
         promptDealer(total, "DEALER TOTAL", async () => {
             if (total < 17) {
@@ -256,14 +258,13 @@ function playDealer() {
             } else {
                 document.getElementById('dealer-status').innerText = total > 21 ? "Dealer Busts!" : `Stands on ${total}`;
                 activePlayerIdx = -1; renderTable();
-                setTimeout(() => document.getElementById('deal-btn').style.display = 'block', 1000);
+                setTimeout(() => { if (roundActive) document.getElementById('deal-btn').style.display = 'block'; }, 800);
             }
         });
     }
-    setTimeout(dealerStep, 500);
+    setTimeout(dealerStep, 400);
 }
 
-// --- PAYOUT DRILL ---
 let streak = 0;
 const payoutBet = document.getElementById('payout-bet');
 const payoutInput = document.getElementById('payout-input');
@@ -295,13 +296,21 @@ payoutInput.addEventListener('keypress', (e) => {
     }
 });
 
-// --- NAVIGATION ---
 function switchTab(mode) {
     document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${mode}`).classList.add('active');
-    document.getElementById('game-mode').style.display = mode === 'game' ? 'flex' : 'none';
-    document.getElementById('payout-mode').style.display = mode === 'payout' ? 'flex' : 'none';
-    if(mode === 'payout') nextPayout();
+    
+    if(mode === 'game') {
+        document.getElementById('payout-mode').style.display = 'none';
+        document.getElementById('game-mode').style.display = 'flex';
+        document.getElementById('deal-btn').style.display = 'block';
+    } else {
+        roundActive = false;
+        hud.classList.add('hud-hidden');
+        document.getElementById('game-mode').style.display = 'none';
+        document.getElementById('payout-mode').style.display = 'flex';
+        nextPayout();
+    }
 }
 
 window.onload = buildDeck;
