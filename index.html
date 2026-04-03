@@ -1,63 +1,74 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dealer Drill - Blackjack Trainer</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <header class="topbar">
-      <h1>🃏 Dealer Drill: Blackjack Trainer</h1>
-      <div class="chips">Lac-Leamy style practice • Dealer perspective</div>
-    </header>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lac-Leamy Dealer Pro Trainer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
 
-    <main>
-      <section class="mode-tabs">
-        <button id="modeGame" class="active">Table Mode</button>
-        <button id="modePayout">3:2 Payout Mode</button>
-      </section>
+<header>
+    <div class="logo">
+        <h1>♠️ CASINO LAC-LEAMY</h1>
+        <span>DEALER DRILL PRO</span>
+    </div>
+    <div class="tabs">
+        <button id="tab-game" class="active" onclick="switchTab('game')">Live Table</button>
+        <button id="tab-payout" onclick="switchTab('payout')">3:2 Payouts</button>
+    </div>
+</header>
 
-      <section id="ruleNotice" class="notice"></section>
+<main id="game-mode">
+    <div class="table-container">
+        <!-- Wood/Leather Rail -->
+        <div class="table-rail">
+            <div class="table-felt">
+                
+                <!-- Dealer Area -->
+                <div class="dealer-area">
+                    <div class="chip-tray">
+                        <div class="tray-column"></div><div class="tray-column"></div>
+                        <div class="tray-column"></div><div class="tray-column"></div>
+                    </div>
+                    <div id="dealer-spot" class="spot">
+                        <div class="hand" id="dealer-hand"></div>
+                        <div class="status-text" id="dealer-status"></div>
+                    </div>
+                </div>
 
-      <section id="gameMode">
-        <div class="table-wrap">
-          <div class="dealer-area">
-            <h2>Dealer Hand</h2>
-            <div id="dealerCards" class="card-row"></div>
-            <div id="dealerResult" class="result"></div>
-          </div>
+                <!-- HUD Prompt (Overlay) -->
+                <div id="action-hud" class="hud-hidden">
+                    <h2 id="hud-title">SPOT 1 TOTAL</h2>
+                    <p id="hud-subtitle">Aces count optimally</p>
+                    <input type="number" id="hud-input" autocomplete="off" />
+                </div>
 
-          <div id="playersArea" class="players"></div>
+                <!-- Deal Button -->
+                <button id="deal-btn" onclick="startRound()">DEAL NEW ROUND</button>
+
+                <!-- Player Area -->
+                <div class="players-arc" id="players-arc">
+                    <!-- Populated by Javascript -->
+                </div>
+
+            </div>
         </div>
+    </div>
+</main>
 
-        <div class="controls">
-          <button id="newRound">Deal New Round</button>
-          <button id="checkTotals">Check My Totals</button>
-        </div>
+<main id="payout-mode" style="display: none;">
+    <div class="payout-widget">
+        <h2>💰 BLACKJACK PAYOUT DRILL</h2>
+        <p>Enter the 3:2 payout for the bet below.</p>
+        <div class="bet-amount">$<span id="payout-bet"></span></div>
+        <input type="number" id="payout-input" step="0.5" placeholder="0.00" />
+        <div id="payout-feedback" class="feedback-text"></div>
+        <div class="streak-counter">Current Streak: <span id="payout-streak">0</span> 🔥</div>
+    </div>
+</main>
 
-        <section class="input-zone">
-          <h3>Your Totals (Dealer Training)</h3>
-          <div id="totalInputs"></div>
-          <div id="feedback" class="feedback"></div>
-        </section>
-      </section>
-
-      <section id="payoutMode" class="hidden">
-        <h2>3:2 Blackjack Payout Drill</h2>
-        <p>Type the payout for a random bet (1 to 50). Example: bet 10 → payout 15.</p>
-        <div class="payout-card">
-          <div id="betPrompt" class="bet-prompt">Bet: --</div>
-          <input id="payoutInput" type="number" step="0.5" placeholder="Your 3:2 payout" />
-          <div class="row">
-            <button id="checkPayout">Check</button>
-            <button id="nextPayout">Next Bet</button>
-          </div>
-          <div id="payoutFeedback" class="feedback"></div>
-        </div>
-      </section>
-    </main>
-
-    <script src="script.js"></script>
-  </body>
+<script src="script.js"></script>
+</body>
 </html>
