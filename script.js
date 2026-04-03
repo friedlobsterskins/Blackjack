@@ -1,7 +1,8 @@
 const suits = ['♠', '♥', '♦', '♣'];
 const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
-const AUTO_NEXT_ROUND_DELAY = 100;
+const AUTO_NEXT_ROUND_DELAY = 200;
+const SPRINT_BEST_STORAGE_KEY = 'blackjackPayoutSprintBestMs';
 
 let deck = [];
 let players = [];
@@ -265,7 +266,7 @@ hudInput.addEventListener('keydown', (e) => {
 async function startRound() {
   cancelNextRoundTimer();
 
-  if (roundActive || !isGameVisible()) return;
+  if (roundActive || !isGameVisible() || isClearingRound) return;
 
   roundActive = true;
   hud.classList.add('hud-hidden');
@@ -471,45 +472,299 @@ function playDealer() {
 
 /* ---------- PAYOUT MODE ---------- */
 
+let payoutMode = 'random';
+let payoutLocked = false;
 let streak = 0;
+let sprintActive = false;
+let sprintCurrentBet = 1;
+let sprintStartTime = 0;
+let sprintTimerInterval = null;
+let sprintBestMs = loadSprintBest();
+let sprintHasStarted = false;
+
+const payoutWidget = document.getElementById('payout-widget');
+const payoutShell = document.getElementById('payout-shell');
+const payoutModeEl = document.getElementById('payout-mode');
 const payoutBet = document.getElementById('payout-bet');
 const payoutInput = document.getElementById('payout-input');
 const payoutFeedback = document.getElementById('payout-feedback');
+const payoutDescription = document.getElementById('payout-description');
+const payoutProgressLabel = document.getElementById('payout-progress-label');
+const payoutProgress = document.getElementById('payout-progress');
+const payoutTimerLabel = document.getElementById('payout-timer-label');
+const payoutTimer = document.getElementById('payout-timer');
+const payoutBestLabel = document.getElementById('payout-best-label');
+const payoutBest = document.getElementById('payout-best');
+const payoutRandomStreak = document.getElementById('payout-random-streak');
+const payoutSprintHint = document.getElementById('payout-sprint-hint');
+const payoutModeRandomBtn = document.getElementById('payout-mode-random');
+const payoutModeSprintBtn = document.getElementById('payout-mode-sprint');
 
-function nextPayout() {
-  const bet = Math.floor(Math.random() * 50) + 1;
+function loadSprintBest() {
+  try {
+    const raw = localStorage.getItem(SPRINT_BEST_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSprintBest(ms) {
+  try {
+    localStorage.setItem(SPRINT_BEST_STORAGE_KEY, String(ms));
+  } catch {
+    // ignore
+  }
+}
+
+function formatTime(ms) {
+  const totalHundredths = Math.floor(ms / 10);
+  const minutes = Math.floor(totalHundredths / 6000);
+  const seconds = Math.floor((totalHundredths % 6000) / 100);
+  const hundredths = totalHundredths % 100;
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+}
+
+function stopSprintTimer() {
+  if (sprintTimerInterval) {
+    clearInterval(sprintTimerInterval);
+    sprintTimerInterval = null;
+  }
+}
+
+function updateSprintBestUI() {
+  payoutBest.innerText = sprintBestMs ? formatTime(sprintBestMs) : '--:--.--';
+}
+
+function setPayoutQuestion(bet) {
   payoutBet.innerText = bet;
   payoutInput.value = '';
   payoutInput.dataset.correct = (bet * 1.5).toFixed(2);
+  payoutInput.disabled = false;
   payoutInput.focus();
 }
+
+function triggerPayoutError(message = '') {
+  payoutInput.classList.remove('error-shake');
+  void payoutInput.offsetWidth;
+  payoutInput.classList.add('error-shake');
+  payoutFeedback.innerText = message;
+  payoutFeedback.style.color = 'var(--danger)';
+}
+
+function clearPayoutFeedback() {
+  payoutFeedback.innerText = '';
+  payoutInput.classList.remove('error-shake');
+}
+
+function updateSprintTimer() {
+  if (!sprintActive || !sprintHasStarted) return;
+  payoutTimer.innerText = formatTime(performance.now() - sprintStartTime);
+}
+
+function beginSprintTimerIfNeeded() {
+  if (!sprintActive || sprintHasStarted) return;
+  if (!payoutInput.value.trim()) return;
+
+  sprintHasStarted = true;
+  sprintStartTime = performance.now();
+  payoutTimer.innerText = '00:00.00';
+  sprintTimerInterval = setInterval(updateSprintTimer, 40);
+}
+
+function startRandomPractice() {
+  payoutLocked = false;
+  stopSprintTimer();
+  sprintActive = false;
+  sprintHasStarted = false;
+
+  payoutWidget.classList.add('random-mode');
+  payoutWidget.classList.remove('sprint-mode');
+
+  payoutDescription.innerText = 'Enter the correct 3:2 payout for the bet below.';
+  payoutProgressLabel.innerText = 'Progress';
+  payoutProgress.innerText = '';
+  payoutTimerLabel.innerText = 'Time';
+  payoutTimer.innerText = '--:--.--';
+  payoutBestLabel.innerText = 'Best';
+  updateSprintBestUI();
+
+  payoutRandomStreak.style.display = 'block';
+  payoutSprintHint.style.display = 'none';
+
+  clearPayoutFeedback();
+  setPayoutQuestion(Math.floor(Math.random() * 50) + 1);
+  updatePayoutScale();
+}
+
+function startSprint() {
+  payoutLocked = false;
+  stopSprintTimer();
+  sprintActive = true;
+  sprintHasStarted = false;
+  sprintCurrentBet = 1;
+
+  payoutWidget.classList.remove('random-mode');
+  payoutWidget.classList.add('sprint-mode');
+
+  payoutDescription.innerText = 'Answer every payout from $1 to $50 in order as fast as you can.';
+  payoutProgressLabel.innerText = 'Progress';
+  payoutProgress.innerText = '1 / 50';
+  payoutTimerLabel.innerText = 'Time';
+  payoutTimer.innerText = '00:00.00';
+  payoutBestLabel.innerText = 'Best';
+  updateSprintBestUI();
+
+  payoutRandomStreak.style.display = 'none';
+  payoutSprintHint.style.display = 'block';
+
+  clearPayoutFeedback();
+  setPayoutQuestion(sprintCurrentBet);
+  updatePayoutScale();
+}
+
+function completeSprint() {
+  payoutLocked = true;
+  sprintActive = false;
+  stopSprintTimer();
+  payoutInput.disabled = true;
+
+  const elapsed = sprintHasStarted ? performance.now() - sprintStartTime : 0;
+  payoutTimer.innerText = formatTime(elapsed);
+  payoutProgress.innerText = '50 / 50';
+
+  if (!sprintBestMs || elapsed < sprintBestMs) {
+    sprintBestMs = elapsed;
+    saveSprintBest(elapsed);
+    payoutFeedback.innerText = `🏁 New best: ${formatTime(elapsed)}`;
+  } else {
+    payoutFeedback.innerText = `🏁 Finished in ${formatTime(elapsed)}`;
+  }
+
+  payoutFeedback.style.color = 'var(--success)';
+  updateSprintBestUI();
+}
+
+function getCurrentPayoutCorrectValue() {
+  return parseFloat(payoutInput.dataset.correct);
+}
+
+function isAutoSubmittableExact(rawValue, correct) {
+  if (!rawValue || rawValue.endsWith('.')) return false;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return false;
+  return Math.abs(parsed - correct) < 0.01;
+}
+
+function handleSprintAnswer() {
+  if (payoutLocked) return;
+
+  const raw = payoutInput.value.trim();
+  if (!raw) return;
+
+  beginSprintTimerIfNeeded();
+
+  const val = parseFloat(raw);
+  const correct = getCurrentPayoutCorrectValue();
+
+  if (Math.abs(val - correct) < 0.01) {
+    payoutLocked = true;
+    clearPayoutFeedback();
+
+    if (sprintCurrentBet >= 50) {
+      completeSprint();
+      return;
+    }
+
+    sprintCurrentBet += 1;
+    payoutProgress.innerText = `${sprintCurrentBet} / 50`;
+    setPayoutQuestion(sprintCurrentBet);
+    payoutLocked = false;
+  } else {
+    triggerPayoutError('Try again');
+  }
+}
+
+function handleRandomAnswer() {
+  if (payoutLocked) return;
+
+  const raw = payoutInput.value.trim();
+  if (!raw) return;
+
+  const val = parseFloat(raw);
+  const correct = getCurrentPayoutCorrectValue();
+
+  if (Math.abs(val - correct) < 0.01) {
+    payoutLocked = true;
+    payoutInput.disabled = true;
+    payoutFeedback.innerText = '✅ CORRECT';
+    payoutFeedback.style.color = 'var(--success)';
+    streak += 1;
+    document.getElementById('payout-streak').innerText = streak;
+
+    setTimeout(() => {
+      clearPayoutFeedback();
+      setPayoutQuestion(Math.floor(Math.random() * 50) + 1);
+      payoutLocked = false;
+    }, 500);
+  } else {
+    streak = 0;
+    document.getElementById('payout-streak').innerText = streak;
+    triggerPayoutError(`❌ WRONG. $${payoutBet.innerText} pays $${correct.toFixed(2)}`);
+
+    setTimeout(() => {
+      clearPayoutFeedback();
+      setPayoutQuestion(Math.floor(Math.random() * 50) + 1);
+    }, 1500);
+  }
+}
+
+function maybeAutoSubmitPayout() {
+  if (payoutLocked || payoutInput.disabled) return;
+
+  if (payoutMode === 'sprint') {
+    beginSprintTimerIfNeeded();
+  }
+
+  const raw = payoutInput.value.trim();
+  const correct = getCurrentPayoutCorrectValue();
+
+  if (!isAutoSubmittableExact(raw, correct)) return;
+
+  if (payoutMode === 'sprint') {
+    handleSprintAnswer();
+  } else {
+    handleRandomAnswer();
+  }
+}
+
+function setPayoutMode(mode) {
+  payoutMode = mode;
+
+  payoutModeRandomBtn.classList.toggle('active', mode === 'random');
+  payoutModeSprintBtn.classList.toggle('active', mode === 'sprint');
+
+  clearPayoutFeedback();
+
+  if (mode === 'sprint') {
+    startSprint();
+  } else {
+    startRandomPractice();
+  }
+}
+
+payoutInput.addEventListener('input', maybeAutoSubmitPayout);
 
 payoutInput.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
 
-  const val = parseFloat(payoutInput.value);
-  const correct = parseFloat(payoutInput.dataset.correct);
-
-  if (Math.abs(val - correct) < 0.01) {
-    payoutFeedback.innerText = '✅ CORRECT';
-    payoutFeedback.style.color = 'var(--success)';
-    streak++;
-    document.getElementById('payout-streak').innerText = streak;
-
-    setTimeout(() => {
-      payoutFeedback.innerText = '';
-      nextPayout();
-    }, 600);
+  if (payoutMode === 'sprint') {
+    handleSprintAnswer();
   } else {
-    payoutFeedback.innerText = `❌ WRONG. $${payoutBet.innerText} pays $${correct.toFixed(2)}`;
-    payoutFeedback.style.color = 'var(--danger)';
-    streak = 0;
-    document.getElementById('payout-streak').innerText = streak;
-
-    setTimeout(() => {
-      payoutFeedback.innerText = '';
-      nextPayout();
-    }, 1800);
+    handleRandomAnswer();
   }
 });
 
@@ -523,6 +778,9 @@ function switchTab(mode) {
   document.getElementById(`tab-${mode}`).classList.add('active');
 
   if (mode === 'game') {
+    stopSprintTimer();
+    sprintActive = false;
+
     document.getElementById('payout-mode').style.display = 'none';
     document.getElementById('game-mode').style.display = 'grid';
 
@@ -545,11 +803,12 @@ function switchTab(mode) {
     document.getElementById('payout-mode').style.display = 'grid';
 
     renderTable();
-    nextPayout();
+    setPayoutMode(payoutMode);
+    setTimeout(updatePayoutScale, 20);
   }
 }
 
-/* ---------- RESPONSIVE TABLE SCALE ---------- */
+/* ---------- RESPONSIVE SCALE ---------- */
 
 function updateTableScale() {
   const shell = document.getElementById('table-shell');
@@ -565,21 +824,58 @@ function updateTableScale() {
   document.documentElement.style.setProperty('--table-scale', safeScale.toFixed(3));
 }
 
-window.addEventListener('resize', updateTableScale);
-window.addEventListener('orientationchange', updateTableScale);
+function updatePayoutScale() {
+  if (getComputedStyle(payoutModeEl).display === 'none') return;
+
+  const rect = payoutModeEl.getBoundingClientRect();
+  const designWidth = 560;
+  const designHeight = payoutMode === 'sprint' ? 700 : 520;
+
+  const horizontalPadding = 28;
+  const verticalPadding = 24;
+
+  const availableWidth = Math.max(280, rect.width - horizontalPadding * 2);
+  const availableHeight = Math.max(280, rect.height - verticalPadding * 2);
+
+  const scale = Math.min(
+    1,
+    availableWidth / designWidth,
+    availableHeight / designHeight
+  );
+
+  document.documentElement.style.setProperty('--payout-scale', scale.toFixed(3));
+  document.documentElement.style.setProperty('--payout-design-height', `${designHeight}px`);
+}
+
+window.addEventListener('resize', () => {
+  updateTableScale();
+  updatePayoutScale();
+});
+
+window.addEventListener('orientationchange', () => {
+  updateTableScale();
+  updatePayoutScale();
+});
 
 window.addEventListener('load', () => {
   buildDeck();
   updateTableScale();
+  updatePayoutScale();
+  updateSprintBestUI();
   renderTable();
   setTimeout(startRound, 350);
 });
 
 if ('ResizeObserver' in window) {
-  const resizeObserver = new ResizeObserver(() => updateTableScale());
+  const resizeObserver = new ResizeObserver(() => {
+    updateTableScale();
+    updatePayoutScale();
+  });
 
   window.addEventListener('load', () => {
-    const shell = document.getElementById('table-shell');
-    if (shell) resizeObserver.observe(shell);
+    const tableShell = document.getElementById('table-shell');
+    if (tableShell) resizeObserver.observe(tableShell);
+    if (payoutModeEl) resizeObserver.observe(payoutModeEl);
+    if (payoutShell) resizeObserver.observe(payoutShell);
   });
 }
