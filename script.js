@@ -2,21 +2,108 @@ const suits = ['♠', '♥', '♦', '♣'];
 const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
 const AUTO_NEXT_ROUND_DELAY = 200;
-const SPRINT_BEST_STORAGE_KEY = 'blackjackPayoutSprintBestMs';
+const STORAGE_KEYS = {
+  app: 'blackjackTrainerAppState',
+  game: 'blackjackTrainerGameState',
+  payout: 'blackjackTrainerPayoutState'
+};
 
 let deck = [];
 let players = [];
 let dealer = { hand: [], isRevealed: false };
 
 let currentExpectedTotal = 0;
-let actionCallback = null;
+let actionContext = null;
 let activePlayerIdx = -1;
 let activeHandIdx = -1;
 let roundActive = false;
 let nextRoundTimer = null;
+let gameFlowTimer = null;
 let isClearingRound = false;
+let gamePaused = false;
+let gamePhase = { type: 'idle' };
+let activeTab = 'game';
+
+let payoutMode = 'random';
+let payoutLocked = false;
+let payoutAdvanceTimer = null;
+
+const payoutState = {
+  random: {
+    currentBet: 1,
+    inputValue: '',
+    feedback: '',
+    currentStreak: 0,
+    bestStreak: 0,
+    pendingAdvance: null,
+    pendingFeedbackType: ''
+  },
+  sprint: {
+    currentBet: 1,
+    inputValue: '',
+    feedback: '',
+    progress: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    elapsedMs: 0,
+    timerRunning: false,
+    timerStartedAt: 0,
+    hasStarted: false,
+    completed: false
+  }
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const centerConsole = document.getElementById('center-console');
+const hud = document.getElementById('action-hud');
+const hudTitle = document.getElementById('hud-title');
+const hudInput = document.getElementById('hud-input');
+const dealBtn = document.getElementById('deal-btn');
+const dealerStatus = document.getElementById('dealer-status');
+
+const payoutWidget = document.getElementById('payout-widget');
+const payoutModeEl = document.getElementById('payout-mode');
+const payoutBet = document.getElementById('payout-bet');
+const payoutInput = document.getElementById('payout-input');
+const payoutFeedback = document.getElementById('payout-feedback');
+const payoutDescription = document.getElementById('payout-description');
+const payoutModeRandomBtn = document.getElementById('payout-mode-random');
+const payoutModeSprintBtn = document.getElementById('payout-mode-sprint');
+const payoutProgress = document.getElementById('payout-progress');
+const payoutTimer = document.getElementById('payout-timer');
+const randomCurrentStreakEl = document.getElementById('random-current-streak');
+const randomBestStreakEl = document.getElementById('random-best-streak');
+const sprintCurrentStreakEl = document.getElementById('sprint-current-streak');
+const sprintBestStreakEl = document.getElementById('sprint-best-streak');
+
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function safeLocalStorageGet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAppState() {
+  safeLocalStorageSet(STORAGE_KEYS.app, { activeTab });
+}
+
+function loadAppState() {
+  const state = safeLocalStorageGet(STORAGE_KEYS.app);
+  if (state?.activeTab === 'game' || state?.activeTab === 'payout') {
+    activeTab = state.activeTab;
+  }
+}
 
 function buildDeck() {
   deck = [];
@@ -29,9 +116,13 @@ function buildDeck() {
     }
   }
 
-  for (let i = deck.length - 1; i > 0; i--) {
+  shuffleDeck(deck);
+}
+
+function shuffleDeck(targetDeck) {
+  for (let i = targetDeck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
+    [targetDeck[i], targetDeck[j]] = [targetDeck[j], targetDeck[i]];
   }
 }
 
@@ -47,12 +138,12 @@ function getBestTotal(hand) {
 
   hand.forEach((card) => {
     total += getVal(card.rank);
-    if (card.rank === 'A') aces++;
+    if (card.rank === 'A') aces += 1;
   });
 
   while (total > 21 && aces > 0) {
     total -= 10;
-    aces--;
+    aces -= 1;
   }
 
   return total;
@@ -187,6 +278,18 @@ function renderTable(animatingCardIdx = -1) {
   }
 }
 
+function triggerSuccessEffect(...elements) {
+  elements.filter(Boolean).forEach((element) => {
+    element.classList.remove('success-pop', 'success-flash');
+    void element.offsetWidth;
+    element.classList.add('success-pop', 'success-flash');
+
+    setTimeout(() => {
+      element.classList.remove('success-pop', 'success-flash');
+    }, 760);
+  });
+}
+
 function cancelNextRoundTimer() {
   if (nextRoundTimer) {
     clearTimeout(nextRoundTimer);
@@ -194,8 +297,50 @@ function cancelNextRoundTimer() {
   }
 }
 
+function cancelGameFlowTimer() {
+  if (gameFlowTimer) {
+    clearTimeout(gameFlowTimer);
+    gameFlowTimer = null;
+  }
+}
+
 function isGameVisible() {
   return getComputedStyle(document.getElementById('game-mode')).display !== 'none';
+}
+
+function isPayoutVisible() {
+  return getComputedStyle(document.getElementById('payout-mode')).display !== 'none';
+}
+
+function updateCenterConsoleVisibility() {
+  centerConsole.classList.toggle('console-hidden', activeTab !== 'game');
+}
+
+function updatePayoutFitScale() {
+  if (!payoutModeEl || !payoutWidget) return;
+  if (!isPayoutVisible()) return;
+
+  document.documentElement.style.setProperty('--payout-fit-scale', '1');
+
+  requestAnimationFrame(() => {
+    const modeRect = payoutModeEl.getBoundingClientRect();
+
+    const paddingX = 24;
+    const paddingY = 24;
+    const availableWidth = Math.max(240, modeRect.width - paddingX * 2);
+    const availableHeight = Math.max(240, modeRect.height - paddingY * 2);
+
+    const naturalWidth = payoutWidget.offsetWidth;
+    const naturalHeight = payoutWidget.offsetHeight;
+
+    if (!naturalWidth || !naturalHeight) return;
+
+    const widthScale = availableWidth / naturalWidth;
+    const heightScale = availableHeight / naturalHeight;
+    const scale = Math.min(1, widthScale, heightScale);
+
+    document.documentElement.style.setProperty('--payout-fit-scale', scale.toFixed(4));
+  });
 }
 
 async function clearTableForNextRound() {
@@ -226,49 +371,116 @@ async function clearTableForNextRound() {
   isClearingRound = false;
 }
 
-const hud = document.getElementById('action-hud');
-const hudTitle = document.getElementById('hud-title');
-const hudInput = document.getElementById('hud-input');
-const dealBtn = document.getElementById('deal-btn');
-const dealerStatus = document.getElementById('dealer-status');
+function saveGameState() {
+  safeLocalStorageSet(STORAGE_KEYS.game, {
+    deck,
+    players,
+    dealer,
+    currentExpectedTotal,
+    actionContext,
+    activePlayerIdx,
+    activeHandIdx,
+    roundActive,
+    gamePaused,
+    gamePhase,
+    dealerStatusText: dealerStatus.innerText,
+    hudTitleText: hudTitle.innerText,
+    hudVisible: !hud.classList.contains('hud-hidden') && activeTab === 'game'
+  });
+}
 
-function promptDealer(expected, title, callback) {
+function restoreGameState() {
+  const state = safeLocalStorageGet(STORAGE_KEYS.game);
+  if (!state) return false;
+
+  deck = Array.isArray(state.deck) && state.deck.length ? state.deck : [];
+  players = Array.isArray(state.players) ? state.players : [];
+  dealer = state.dealer?.hand ? state.dealer : { hand: [], isRevealed: false };
+  currentExpectedTotal = Number.isFinite(state.currentExpectedTotal) ? state.currentExpectedTotal : 0;
+  actionContext = state.actionContext ?? null;
+  activePlayerIdx = state.activePlayerIdx ?? -1;
+  activeHandIdx = state.activeHandIdx ?? -1;
+  roundActive = Boolean(state.roundActive);
+  gamePaused = true;
+  gamePhase = state.gamePhase ?? { type: 'idle' };
+  dealerStatus.innerText = state.dealerStatusText ?? '';
+  hudTitle.innerText = state.hudTitleText ?? 'SPOT 1 TOTAL';
+  hud.classList.add('hud-hidden');
+  dealBtn.style.display = 'none';
+  renderTable();
+  return players.length > 0 || dealer.hand.length > 0 || roundActive;
+}
+
+function scheduleGameAction(action, delay = 0) {
+  cancelGameFlowTimer();
+  gamePhase = { type: 'resume-action', action };
+  saveGameState();
+
+  if (gamePaused || !isGameVisible()) return;
+
+  gameFlowTimer = setTimeout(() => {
+    gameFlowTimer = null;
+    dispatchGameAction(action);
+  }, delay);
+}
+
+function promptDealer(expected, title, nextAction) {
   if (!roundActive) return;
 
   currentExpectedTotal = expected;
-  actionCallback = callback;
+  actionContext = nextAction;
   hudTitle.innerText = title;
-  hud.classList.remove('hud-hidden');
+  if (activeTab === 'game') {
+    hud.classList.remove('hud-hidden');
+  }
   hudInput.value = '';
   hudInput.classList.remove('error-shake');
+  gamePhase = {
+    type: 'prompt',
+    expected,
+    title,
+    action: nextAction
+  };
+  saveGameState();
 
   setTimeout(() => {
-    if (roundActive) hudInput.focus();
+    if (roundActive && isGameVisible()) hudInput.focus();
   }, 50);
 }
 
-hudInput.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter' || !roundActive) return;
+function dealInitialStep(step = 0) {
+  if (!roundActive) return;
 
-  const val = parseInt(hudInput.value, 10);
-
-  if (val === currentExpectedTotal) {
-    hud.classList.add('hud-hidden');
-    if (typeof actionCallback === 'function') actionCallback();
-  } else {
-    hudInput.classList.remove('error-shake');
-    void hudInput.offsetWidth;
-    hudInput.classList.add('error-shake');
-    hudInput.value = '';
+  if (step >= 8) {
+    scheduleGameAction({ type: 'playHand', pIdx: 0, hIdx: 0 }, 350);
+    return;
   }
-});
 
-async function startRound() {
+  const cycle = Math.floor(step / 4);
+  const seat = step % 4;
+
+  if (seat < players.length) {
+    players[seat].hands[0].cards.push(deck.pop());
+    renderTable(`player-${seat}-0-${cycle}`);
+  } else {
+    dealer.hand.push(deck.pop());
+    renderTable(`dealer-${cycle}`);
+  }
+
+  gamePhase = { type: 'dealing', step: step + 1 };
+  saveGameState();
+  scheduleGameAction({ type: 'dealInitialStep', step: step + 1 }, 170);
+}
+
+function startRound() {
   cancelNextRoundTimer();
+  cancelGameFlowTimer();
 
-  if (roundActive || !isGameVisible() || isClearingRound) return;
+  if ((roundActive && gamePhase.type !== 'round-finished') || isClearingRound) return;
+  if (!isGameVisible()) return;
 
   roundActive = true;
+  gamePaused = false;
   hud.classList.add('hud-hidden');
   dealerStatus.innerText = '';
   dealBtn.style.display = 'none';
@@ -286,35 +498,18 @@ async function startRound() {
   }));
 
   dealer = { hand: [], isRevealed: false };
-
+  gamePhase = { type: 'dealing', step: 0 };
   renderTable();
-
-  for (let i = 0; i < 2; i++) {
-    for (let pIdx = 0; pIdx < players.length; pIdx++) {
-      if (!roundActive) return;
-
-      players[pIdx].hands[0].cards.push(deck.pop());
-      renderTable(`player-${pIdx}-0-${i}`);
-      await sleep(170);
-    }
-
-    if (!roundActive) return;
-
-    dealer.hand.push(deck.pop());
-    renderTable(`dealer-${i}`);
-    await sleep(170);
-  }
-
-  if (roundActive) {
-    setTimeout(() => playHand(0, 0), 350);
-  }
+  saveGameState();
+  scheduleGameAction({ type: 'dealInitialStep', step: 0 }, 80);
 }
 
-async function playHand(pIdx, hIdx) {
+function playHand(pIdx, hIdx) {
   if (!roundActive) return;
 
   if (pIdx >= players.length) {
-    return playDealer();
+    playDealerStart();
+    return;
   }
 
   activePlayerIdx = pIdx;
@@ -324,91 +519,83 @@ async function playHand(pIdx, hIdx) {
   const handObj = players[pIdx].hands[hIdx];
   const cards = handObj.cards;
   const total = getBestTotal(cards);
-  const upCardVal = getVal(dealer.hand[0].rank);
 
   if (cards.length === 2 && total === 21) {
-    promptDealer(21, `SPOT ${pIdx + 1} BLACKJACK`, () => nextHand(pIdx, hIdx));
+    promptDealer(21, `SPOT ${pIdx + 1} BLACKJACK`, { type: 'nextHand', pIdx, hIdx });
     return;
   }
 
-  promptDealer(total, `SPOT ${pIdx + 1} TOTAL`, async () => {
-    if (!roundActive) return;
+  promptDealer(total, `SPOT ${pIdx + 1} TOTAL`, { type: 'resolveHandAction', pIdx, hIdx });
+}
 
-    if (total >= 21 || handObj.isDouble) {
-      return nextHand(pIdx, hIdx);
-    }
+function resolveHandAction(pIdx, hIdx) {
+  if (!roundActive) return;
 
-    if (
-      cards.length === 2 &&
-      cards[0].rank === cards[1].rank &&
-      ['8', 'A'].includes(cards[0].rank)
-    ) {
-      const isAces = cards[0].rank === 'A';
+  const handObj = players[pIdx]?.hands[hIdx];
+  if (!handObj) return;
 
-      players[pIdx].hands = [
-        { cards: [cards[0]], isDouble: false },
-        { cards: [cards[1]], isDouble: false }
-      ];
+  const cards = handObj.cards;
+  const total = getBestTotal(cards);
+  const upCardVal = getVal(dealer.hand[0].rank);
 
-      if (isAces) {
-        players[pIdx].hands[0].cards.push(deck.pop());
-        players[pIdx].hands[1].cards.push(deck.pop());
-        renderTable(`player-${pIdx}-1-1`);
-
-        promptDealer(
-          getBestTotal(players[pIdx].hands[0].cards),
-          'SPLIT ACE 1',
-          () => {
-            activeHandIdx = 1;
-            renderTable();
-
-            promptDealer(
-              getBestTotal(players[pIdx].hands[1].cards),
-              'SPLIT ACE 2',
-              () => nextHand(pIdx, 1)
-            );
-          }
-        );
-      } else {
-        players[pIdx].hands[0].cards.push(deck.pop());
-        renderTable(`player-${pIdx}-0-1`);
-        await sleep(240);
-        return playHand(pIdx, 0);
-      }
-
-      return;
-    }
-
-    const action = botAction(cards, upCardVal);
-
-    if (action === 'DOUBLE') {
-      players[pIdx].bet *= 2;
-      handObj.isDouble = true;
-      handObj.cards.push(deck.pop());
-
-      renderTable(`player-${pIdx}-${hIdx}-2`);
-      await sleep(280);
-
-      promptDealer(
-        getBestTotal(handObj.cards),
-        `SPOT ${pIdx + 1} DOUBLE DOWN`,
-        () => nextHand(pIdx, hIdx)
-      );
-      return;
-    }
-
-    if (action === 'HIT') {
-      const hitIdx = handObj.cards.length;
-      handObj.cards.push(deck.pop());
-
-      renderTable(`player-${pIdx}-${hIdx}-${hitIdx}`);
-      await sleep(240);
-
-      return playHand(pIdx, hIdx);
-    }
-
+  if (total >= 21 || handObj.isDouble) {
     nextHand(pIdx, hIdx);
-  });
+    return;
+  }
+
+  if (
+    cards.length === 2 &&
+    cards[0].rank === cards[1].rank &&
+    ['8', 'A'].includes(cards[0].rank)
+  ) {
+    const isAces = cards[0].rank === 'A';
+
+    players[pIdx].hands = [
+      { cards: [cards[0]], isDouble: false },
+      { cards: [cards[1]], isDouble: false }
+    ];
+
+    if (isAces) {
+      players[pIdx].hands[0].cards.push(deck.pop());
+      players[pIdx].hands[1].cards.push(deck.pop());
+      activeHandIdx = 0;
+      renderTable(`player-${pIdx}-1-1`);
+      saveGameState();
+      scheduleGameAction({ type: 'splitAcePromptFirst', pIdx }, 240);
+      return;
+    }
+
+    players[pIdx].hands[0].cards.push(deck.pop());
+    renderTable(`player-${pIdx}-0-1`);
+    saveGameState();
+    scheduleGameAction({ type: 'playHand', pIdx, hIdx: 0 }, 240);
+    return;
+  }
+
+  const action = botAction(cards, upCardVal);
+
+  if (action === 'DOUBLE') {
+    players[pIdx].bet *= 2;
+    handObj.isDouble = true;
+    handObj.cards.push(deck.pop());
+
+    renderTable(`player-${pIdx}-${hIdx}-2`);
+    saveGameState();
+    scheduleGameAction({ type: 'afterDouble', pIdx, hIdx }, 280);
+    return;
+  }
+
+  if (action === 'HIT') {
+    const hitIdx = handObj.cards.length;
+    handObj.cards.push(deck.pop());
+
+    renderTable(`player-${pIdx}-${hIdx}-${hitIdx}`);
+    saveGameState();
+    scheduleGameAction({ type: 'playHand', pIdx, hIdx }, 240);
+    return;
+  }
+
+  nextHand(pIdx, hIdx);
 }
 
 function nextHand(pIdx, hIdx) {
@@ -419,104 +606,193 @@ function nextHand(pIdx, hIdx) {
   }
 }
 
-function finishRound(message) {
-  dealerStatus.innerText = message;
-  activePlayerIdx = -1;
-  activeHandIdx = -1;
-  roundActive = false;
-  renderTable();
-
-  cancelNextRoundTimer();
-  nextRoundTimer = setTimeout(async () => {
-    if (!roundActive && isGameVisible()) {
-      await clearTableForNextRound();
-      if (!roundActive && isGameVisible()) {
-        startRound();
-      }
-    }
-  }, AUTO_NEXT_ROUND_DELAY);
-}
-
-function playDealer() {
+function playDealerStart() {
   if (!roundActive) return;
 
   activePlayerIdx = 'dealer';
   activeHandIdx = -1;
   dealer.isRevealed = true;
   renderTable();
+  saveGameState();
+  scheduleGameAction({ type: 'dealerStep' }, 350);
+}
 
-  const dealerStep = () => {
-    if (!roundActive) return;
+function dealerStep() {
+  if (!roundActive) return;
 
-    const total = getBestTotal(dealer.hand);
+  const total = getBestTotal(dealer.hand);
+  promptDealer(total, 'DEALER TOTAL', { type: 'resolveDealerAction' });
+}
 
-    promptDealer(total, 'DEALER TOTAL', async () => {
-      if (!roundActive) return;
+function resolveDealerAction() {
+  if (!roundActive) return;
 
-      if (total < 17) {
-        const hitIdx = dealer.hand.length;
-        dealer.hand.push(deck.pop());
+  const total = getBestTotal(dealer.hand);
 
-        renderTable(`dealer-${hitIdx}`);
-        await sleep(320);
-        dealerStep();
-        return;
+  if (total < 17) {
+    const hitIdx = dealer.hand.length;
+    dealer.hand.push(deck.pop());
+
+    renderTable(`dealer-${hitIdx}`);
+    saveGameState();
+    scheduleGameAction({ type: 'dealerStep' }, 320);
+    return;
+  }
+
+  finishRound(total > 21 ? 'Dealer busts' : `Stands on ${total}`);
+}
+
+function finishRound(message) {
+  dealerStatus.innerText = message;
+  activePlayerIdx = -1;
+  activeHandIdx = -1;
+  roundActive = false;
+  gamePhase = { type: 'round-finished' };
+  hud.classList.add('hud-hidden');
+  renderTable();
+  saveGameState();
+
+  cancelNextRoundTimer();
+  nextRoundTimer = setTimeout(async () => {
+    if (roundActive || !isGameVisible()) return;
+    await clearTableForNextRound();
+    if (!roundActive && isGameVisible()) {
+      startRound();
+    }
+  }, AUTO_NEXT_ROUND_DELAY);
+}
+
+function dispatchGameAction(action) {
+  if (!action) return;
+
+  switch (action.type) {
+    case 'dealInitialStep':
+      dealInitialStep(action.step);
+      break;
+    case 'playHand':
+      playHand(action.pIdx, action.hIdx);
+      break;
+    case 'resolveHandAction':
+      resolveHandAction(action.pIdx, action.hIdx);
+      break;
+    case 'nextHand':
+      nextHand(action.pIdx, action.hIdx);
+      break;
+    case 'splitAcePromptFirst':
+      promptDealer(
+        getBestTotal(players[action.pIdx].hands[0].cards),
+        'SPLIT ACE 1',
+        { type: 'splitAcePromptSecond', pIdx: action.pIdx }
+      );
+      break;
+    case 'splitAcePromptSecond':
+      activeHandIdx = 1;
+      renderTable();
+      promptDealer(
+        getBestTotal(players[action.pIdx].hands[1].cards),
+        'SPLIT ACE 2',
+        { type: 'nextHand', pIdx: action.pIdx, hIdx: 1 }
+      );
+      break;
+    case 'afterDouble':
+      promptDealer(
+        getBestTotal(players[action.pIdx].hands[action.hIdx].cards),
+        `SPOT ${action.pIdx + 1} DOUBLE DOWN`,
+        { type: 'nextHand', pIdx: action.pIdx, hIdx: action.hIdx }
+      );
+      break;
+    case 'dealerStep':
+      dealerStep();
+      break;
+    case 'resolveDealerAction':
+      resolveDealerAction();
+      break;
+    default:
+      break;
+  }
+}
+
+function pauseGame() {
+  gamePaused = true;
+  cancelGameFlowTimer();
+  cancelNextRoundTimer();
+  hud.classList.add('hud-hidden');
+  saveGameState();
+}
+
+function resumeGame() {
+  if (!isGameVisible()) return;
+
+  gamePaused = false;
+  saveGameState();
+
+  if (gamePhase.type === 'prompt') {
+    hud.classList.remove('hud-hidden');
+    setTimeout(() => {
+      if (isGameVisible()) hudInput.focus();
+    }, 50);
+    return;
+  }
+
+  if (gamePhase.type === 'dealing') {
+    scheduleGameAction({ type: 'dealInitialStep', step: gamePhase.step ?? 0 }, 120);
+    return;
+  }
+
+  if (gamePhase.type === 'resume-action' && gamePhase.action) {
+    scheduleGameAction(gamePhase.action, 120);
+    return;
+  }
+
+  if (gamePhase.type === 'round-finished') {
+    nextRoundTimer = setTimeout(async () => {
+      if (roundActive || !isGameVisible()) return;
+      await clearTableForNextRound();
+      if (!roundActive && isGameVisible()) {
+        startRound();
       }
+    }, AUTO_NEXT_ROUND_DELAY);
+    return;
+  }
 
-      finishRound(total > 21 ? 'Dealer busts' : `Stands on ${total}`);
-    });
-  };
-
-  setTimeout(dealerStep, 350);
-}
-
-/* ---------- PAYOUT MODE ---------- */
-
-let payoutMode = 'random';
-let payoutLocked = false;
-let streak = 0;
-let sprintActive = false;
-let sprintCurrentBet = 1;
-let sprintStartTime = 0;
-let sprintTimerInterval = null;
-let sprintBestMs = loadSprintBest();
-let sprintHasStarted = false;
-
-const payoutWidget = document.getElementById('payout-widget');
-const payoutShell = document.getElementById('payout-shell');
-const payoutModeEl = document.getElementById('payout-mode');
-const payoutBet = document.getElementById('payout-bet');
-const payoutInput = document.getElementById('payout-input');
-const payoutFeedback = document.getElementById('payout-feedback');
-const payoutDescription = document.getElementById('payout-description');
-const payoutProgressLabel = document.getElementById('payout-progress-label');
-const payoutProgress = document.getElementById('payout-progress');
-const payoutTimerLabel = document.getElementById('payout-timer-label');
-const payoutTimer = document.getElementById('payout-timer');
-const payoutBestLabel = document.getElementById('payout-best-label');
-const payoutBest = document.getElementById('payout-best');
-const payoutRandomStreak = document.getElementById('payout-random-streak');
-const payoutSprintHint = document.getElementById('payout-sprint-hint');
-const payoutModeRandomBtn = document.getElementById('payout-mode-random');
-const payoutModeSprintBtn = document.getElementById('payout-mode-sprint');
-
-function loadSprintBest() {
-  try {
-    const raw = localStorage.getItem(SPRINT_BEST_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : null;
-  } catch {
-    return null;
+  if (!roundActive && players.length === 0 && dealer.hand.length === 0) {
+    startRound();
   }
 }
 
-function saveSprintBest(ms) {
-  try {
-    localStorage.setItem(SPRINT_BEST_STORAGE_KEY, String(ms));
-  } catch {
-    // ignore
+hudInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !roundActive) return;
+
+  const val = parseInt(hudInput.value, 10);
+
+  if (val === currentExpectedTotal) {
+    triggerSuccessEffect(hud, hudInput);
+    hud.classList.add('hud-hidden');
+    const nextAction = actionContext;
+    actionContext = null;
+    dispatchGameAction(nextAction);
+    saveGameState();
+  } else {
+    hudInput.classList.remove('error-shake');
+    void hudInput.offsetWidth;
+    hudInput.classList.add('error-shake');
+    hudInput.value = '';
   }
+});
+
+function cancelPayoutAdvanceTimer() {
+  if (payoutAdvanceTimer) {
+    clearTimeout(payoutAdvanceTimer);
+    payoutAdvanceTimer = null;
+  }
+}
+
+function getCurrentPayoutCorrectValue() {
+  return parseFloat(payoutInput.dataset.correct);
+}
+
+function getRandomBet() {
+  return Math.floor(Math.random() * 50) + 1;
 }
 
 function formatTime(ms) {
@@ -528,128 +804,272 @@ function formatTime(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
 }
 
-function stopSprintTimer() {
-  if (sprintTimerInterval) {
-    clearInterval(sprintTimerInterval);
-    sprintTimerInterval = null;
+function getSprintElapsedMs() {
+  if (payoutState.sprint.timerRunning) {
+    return payoutState.sprint.elapsedMs + (performance.now() - payoutState.sprint.timerStartedAt);
+  }
+  return payoutState.sprint.elapsedMs;
+}
+
+function updateSprintTimerDisplay() {
+  payoutTimer.innerText = formatTime(getSprintElapsedMs());
+}
+
+function stopSprintTimerInterval() {
+  if (window.__sprintTimerInterval) {
+    clearInterval(window.__sprintTimerInterval);
+    window.__sprintTimerInterval = null;
   }
 }
 
-function updateSprintBestUI() {
-  payoutBest.innerText = sprintBestMs ? formatTime(sprintBestMs) : '--:--.--';
+function beginSprintTimerIfNeeded() {
+  const sprint = payoutState.sprint;
+
+  if (payoutMode !== 'sprint' || payoutLocked || sprint.completed) return;
+  if (sprint.timerRunning) return;
+  if (!payoutInput.value.trim()) return;
+
+  sprint.hasStarted = true;
+  sprint.timerRunning = true;
+  sprint.timerStartedAt = performance.now();
+  stopSprintTimerInterval();
+  window.__sprintTimerInterval = setInterval(updateSprintTimerDisplay, 40);
+  savePayoutState();
 }
 
-function setPayoutQuestion(bet) {
+function pauseSprintTimerProgress() {
+  const sprint = payoutState.sprint;
+
+  if (sprint.timerRunning) {
+    sprint.elapsedMs += performance.now() - sprint.timerStartedAt;
+    sprint.timerRunning = false;
+    sprint.timerStartedAt = 0;
+  }
+
+  stopSprintTimerInterval();
+  updateSprintTimerDisplay();
+  savePayoutState();
+}
+
+function setPayoutQuestion(bet, restoreValue = '') {
   payoutBet.innerText = bet;
-  payoutInput.value = '';
   payoutInput.dataset.correct = (bet * 1.5).toFixed(2);
-  payoutInput.disabled = false;
-  payoutInput.focus();
+  payoutInput.value = restoreValue;
+  payoutInput.disabled = payoutLocked;
+
+  if (isPayoutVisible()) {
+    setTimeout(() => payoutInput.focus(), 0);
+  }
+}
+
+function setPayoutFeedback(text = '', type = '') {
+  payoutFeedback.innerText = text;
+  payoutFeedback.style.color =
+    type === 'success'
+      ? 'var(--success)'
+      : type === 'error'
+        ? 'var(--danger)'
+        : 'var(--text)';
 }
 
 function triggerPayoutError(message = '') {
   payoutInput.classList.remove('error-shake');
   void payoutInput.offsetWidth;
   payoutInput.classList.add('error-shake');
-  payoutFeedback.innerText = message;
-  payoutFeedback.style.color = 'var(--danger)';
+  setPayoutFeedback(message, 'error');
 }
 
 function clearPayoutFeedback() {
-  payoutFeedback.innerText = '';
   payoutInput.classList.remove('error-shake');
+  setPayoutFeedback('', '');
 }
 
-function updateSprintTimer() {
-  if (!sprintActive || !sprintHasStarted) return;
-  payoutTimer.innerText = formatTime(performance.now() - sprintStartTime);
-}
-
-function beginSprintTimerIfNeeded() {
-  if (!sprintActive || sprintHasStarted) return;
-  if (!payoutInput.value.trim()) return;
-
-  sprintHasStarted = true;
-  sprintStartTime = performance.now();
-  payoutTimer.innerText = '00:00.00';
-  sprintTimerInterval = setInterval(updateSprintTimer, 40);
-}
-
-function startRandomPractice() {
-  payoutLocked = false;
-  stopSprintTimer();
-  sprintActive = false;
-  sprintHasStarted = false;
+function updateRandomUI() {
+  const random = payoutState.random;
 
   payoutWidget.classList.add('random-mode');
   payoutWidget.classList.remove('sprint-mode');
-
   payoutDescription.innerText = 'Enter the correct 3:2 payout for the bet below.';
-  payoutProgressLabel.innerText = 'Progress';
-  payoutProgress.innerText = '';
-  payoutTimerLabel.innerText = 'Time';
-  payoutTimer.innerText = '--:--.--';
-  payoutBestLabel.innerText = 'Best';
-  updateSprintBestUI();
-
-  payoutRandomStreak.style.display = 'block';
-  payoutSprintHint.style.display = 'none';
-
-  clearPayoutFeedback();
-  setPayoutQuestion(Math.floor(Math.random() * 50) + 1);
-  updatePayoutScale();
+  randomCurrentStreakEl.innerText = random.currentStreak;
+  randomBestStreakEl.innerText = random.bestStreak;
+  payoutLocked = Boolean(random.pendingAdvance);
+  setPayoutQuestion(random.currentBet, random.inputValue);
+  payoutInput.disabled = payoutLocked;
+  setPayoutFeedback(random.feedback, random.pendingFeedbackType || '');
 }
 
-function startSprint() {
-  payoutLocked = false;
-  stopSprintTimer();
-  sprintActive = true;
-  sprintHasStarted = false;
-  sprintCurrentBet = 1;
+function updateSprintUI() {
+  const sprint = payoutState.sprint;
 
   payoutWidget.classList.remove('random-mode');
   payoutWidget.classList.add('sprint-mode');
-
   payoutDescription.innerText = 'Answer every payout from $1 to $50 in order as fast as you can.';
-  payoutProgressLabel.innerText = 'Progress';
-  payoutProgress.innerText = '1 / 50';
-  payoutTimerLabel.innerText = 'Time';
-  payoutTimer.innerText = '00:00.00';
-  payoutBestLabel.innerText = 'Best';
-  updateSprintBestUI();
-
-  payoutRandomStreak.style.display = 'none';
-  payoutSprintHint.style.display = 'block';
-
-  clearPayoutFeedback();
-  setPayoutQuestion(sprintCurrentBet);
-  updatePayoutScale();
+  payoutProgress.innerText = `${Math.min(sprint.progress + 1, 50)} / 50`;
+  sprintCurrentStreakEl.innerText = sprint.currentStreak;
+  sprintBestStreakEl.innerText = sprint.bestStreak;
+  updateSprintTimerDisplay();
+  payoutLocked = false;
+  setPayoutQuestion(sprint.currentBet, sprint.inputValue);
+  payoutInput.disabled = sprint.completed;
+  setPayoutFeedback(sprint.feedback, sprint.completed ? 'success' : '');
 }
 
-function completeSprint() {
-  payoutLocked = true;
-  sprintActive = false;
-  stopSprintTimer();
-  payoutInput.disabled = true;
+function renderPayoutMode() {
+  payoutModeRandomBtn.classList.toggle('active', payoutMode === 'random');
+  payoutModeSprintBtn.classList.toggle('active', payoutMode === 'sprint');
 
-  const elapsed = sprintHasStarted ? performance.now() - sprintStartTime : 0;
-  payoutTimer.innerText = formatTime(elapsed);
-  payoutProgress.innerText = '50 / 50';
-
-  if (!sprintBestMs || elapsed < sprintBestMs) {
-    sprintBestMs = elapsed;
-    saveSprintBest(elapsed);
-    payoutFeedback.innerText = `🏁 New best: ${formatTime(elapsed)}`;
+  if (payoutMode === 'random') {
+    updateRandomUI();
   } else {
-    payoutFeedback.innerText = `🏁 Finished in ${formatTime(elapsed)}`;
+    updateSprintUI();
+  }
+}
+
+function savePayoutState() {
+  const sprint = payoutState.sprint;
+  const payload = {
+    payoutMode,
+    random: {
+      ...payoutState.random
+    },
+    sprint: {
+      ...sprint,
+      elapsedMs: Math.round(getSprintElapsedMs()),
+      timerRunning: false,
+      timerStartedAt: 0
+    }
+  };
+
+  safeLocalStorageSet(STORAGE_KEYS.payout, payload);
+}
+
+function restorePayoutState() {
+  const state = safeLocalStorageGet(STORAGE_KEYS.payout);
+  if (!state) return false;
+
+  payoutMode = state.payoutMode === 'sprint' ? 'sprint' : 'random';
+
+  Object.assign(payoutState.random, {
+    currentBet: Number.isFinite(state.random?.currentBet) ? state.random.currentBet : 1,
+    inputValue: state.random?.inputValue ?? '',
+    feedback: state.random?.feedback ?? '',
+    currentStreak: Number.isFinite(state.random?.currentStreak) ? state.random.currentStreak : 0,
+    bestStreak: Number.isFinite(state.random?.bestStreak) ? state.random.bestStreak : 0,
+    pendingAdvance: state.random?.pendingAdvance ?? null,
+    pendingFeedbackType: state.random?.pendingFeedbackType ?? ''
+  });
+
+  Object.assign(payoutState.sprint, {
+    currentBet: Number.isFinite(state.sprint?.currentBet) ? state.sprint.currentBet : 1,
+    inputValue: state.sprint?.inputValue ?? '',
+    feedback: state.sprint?.feedback ?? '',
+    progress: Number.isFinite(state.sprint?.progress) ? state.sprint.progress : 0,
+    currentStreak: Number.isFinite(state.sprint?.currentStreak) ? state.sprint.currentStreak : 0,
+    bestStreak: Number.isFinite(state.sprint?.bestStreak) ? state.sprint.bestStreak : 0,
+    elapsedMs: Number.isFinite(state.sprint?.elapsedMs) ? state.sprint.elapsedMs : 0,
+    timerRunning: false,
+    timerStartedAt: 0,
+    hasStarted: Boolean(state.sprint?.hasStarted),
+    completed: Boolean(state.sprint?.completed)
+  });
+
+  if (!payoutState.random.currentBet) payoutState.random.currentBet = getRandomBet();
+  if (!payoutState.sprint.currentBet) payoutState.sprint.currentBet = 1;
+
+  renderPayoutMode();
+  return true;
+}
+
+function initDefaultPayoutState() {
+  payoutMode = 'random';
+  payoutState.random.currentBet = getRandomBet();
+  payoutState.random.inputValue = '';
+  payoutState.random.feedback = '';
+  payoutState.random.currentStreak = 0;
+  payoutState.random.bestStreak = 0;
+  payoutState.random.pendingAdvance = null;
+  payoutState.random.pendingFeedbackType = '';
+
+  payoutState.sprint.currentBet = 1;
+  payoutState.sprint.inputValue = '';
+  payoutState.sprint.feedback = '';
+  payoutState.sprint.progress = 0;
+  payoutState.sprint.currentStreak = 0;
+  payoutState.sprint.bestStreak = 0;
+  payoutState.sprint.elapsedMs = 0;
+  payoutState.sprint.timerRunning = false;
+  payoutState.sprint.timerStartedAt = 0;
+  payoutState.sprint.hasStarted = false;
+  payoutState.sprint.completed = false;
+
+  renderPayoutMode();
+  savePayoutState();
+}
+
+function completePendingRandomAdvance() {
+  const random = payoutState.random;
+  random.pendingAdvance = null;
+  random.pendingFeedbackType = '';
+  random.feedback = '';
+  random.inputValue = '';
+  random.currentBet = getRandomBet();
+  payoutLocked = false;
+  renderPayoutMode();
+  savePayoutState();
+}
+
+function scheduleRandomAdvance(delay) {
+  const random = payoutState.random;
+  cancelPayoutAdvanceTimer();
+  random.pendingAdvance = { delay };
+  savePayoutState();
+
+  if (activeTab !== 'payout' || payoutMode !== 'random') return;
+
+  payoutAdvanceTimer = setTimeout(() => {
+    completePendingRandomAdvance();
+  }, delay);
+}
+
+function setPayoutMode(mode) {
+  if (mode === payoutMode) {
+    if (mode === 'sprint') {
+      pauseSprintTimerProgress();
+      payoutState.sprint.currentBet = 1;
+      payoutState.sprint.inputValue = '';
+      payoutState.sprint.feedback = '';
+      payoutState.sprint.progress = 0;
+      payoutState.sprint.currentStreak = 0;
+      payoutState.sprint.elapsedMs = 0;
+      payoutState.sprint.timerRunning = false;
+      payoutState.sprint.timerStartedAt = 0;
+      payoutState.sprint.hasStarted = false;
+      payoutState.sprint.completed = false;
+    }
+
+    if (mode === 'random') {
+      cancelPayoutAdvanceTimer();
+      payoutState.random.pendingAdvance = null;
+      payoutState.random.pendingFeedbackType = '';
+      payoutState.random.feedback = '';
+      payoutState.random.inputValue = '';
+      payoutState.random.currentStreak = 0;
+      payoutState.random.currentBet = getRandomBet();
+    }
+
+    renderPayoutMode();
+    savePayoutState();
+    return;
   }
 
-  payoutFeedback.style.color = 'var(--success)';
-  updateSprintBestUI();
-}
+  if (payoutMode === 'sprint') {
+    pauseSprintTimerProgress();
+  }
 
-function getCurrentPayoutCorrectValue() {
-  return parseFloat(payoutInput.dataset.correct);
+  cancelPayoutAdvanceTimer();
+  payoutMode = mode;
+  renderPayoutMode();
+  savePayoutState();
 }
 
 function isAutoSubmittableExact(rawValue, correct) {
@@ -659,100 +1079,106 @@ function isAutoSubmittableExact(rawValue, correct) {
   return Math.abs(parsed - correct) < 0.01;
 }
 
-function handleSprintAnswer() {
-  if (payoutLocked) return;
+function handleRandomAnswer() {
+  if (payoutLocked || payoutMode !== 'random') return;
 
+  const random = payoutState.random;
   const raw = payoutInput.value.trim();
   if (!raw) return;
 
+  random.inputValue = raw;
+  const val = parseFloat(raw);
+  const correct = getCurrentPayoutCorrectValue();
+
+  if (Math.abs(val - correct) < 0.01) {
+    payoutLocked = true;
+    random.currentStreak += 1;
+    if (random.currentStreak > random.bestStreak) {
+      random.bestStreak = random.currentStreak;
+    }
+    random.feedback = '✅ CORRECT';
+    random.pendingFeedbackType = 'success';
+    triggerSuccessEffect(payoutWidget, payoutInput);
+    renderPayoutMode();
+    scheduleRandomAdvance(500);
+  } else {
+    payoutLocked = true;
+    random.currentStreak = 0;
+    random.feedback = `❌ WRONG. $${payoutBet.innerText} pays $${correct.toFixed(2)}`;
+    random.pendingFeedbackType = 'error';
+    renderPayoutMode();
+    triggerPayoutError(random.feedback);
+    scheduleRandomAdvance(1500);
+  }
+}
+
+function handleSprintAnswer() {
+  if (payoutLocked || payoutMode !== 'sprint' || payoutState.sprint.completed) return;
+
+  const sprint = payoutState.sprint;
+  const raw = payoutInput.value.trim();
+  if (!raw) return;
+
+  sprint.inputValue = raw;
   beginSprintTimerIfNeeded();
 
   const val = parseFloat(raw);
   const correct = getCurrentPayoutCorrectValue();
 
   if (Math.abs(val - correct) < 0.01) {
-    payoutLocked = true;
-    clearPayoutFeedback();
+    sprint.progress += 1;
+    sprint.currentStreak += 1;
+    if (sprint.currentStreak > sprint.bestStreak) {
+      sprint.bestStreak = sprint.currentStreak;
+    }
 
-    if (sprintCurrentBet >= 50) {
-      completeSprint();
+    triggerSuccessEffect(payoutWidget, payoutInput);
+
+    if (sprint.progress >= 50) {
+      pauseSprintTimerProgress();
+      sprint.completed = true;
+      sprint.feedback = `🏁 Finished in ${formatTime(sprint.elapsedMs)}`;
+      sprint.inputValue = '';
+      renderPayoutMode();
+      savePayoutState();
       return;
     }
 
-    sprintCurrentBet += 1;
-    payoutProgress.innerText = `${sprintCurrentBet} / 50`;
-    setPayoutQuestion(sprintCurrentBet);
-    payoutLocked = false;
+    sprint.currentBet += 1;
+    sprint.inputValue = '';
+    sprint.feedback = '';
+    renderPayoutMode();
+    savePayoutState();
   } else {
+    sprint.currentStreak = 0;
+    renderPayoutMode();
     triggerPayoutError('Try again');
-  }
-}
-
-function handleRandomAnswer() {
-  if (payoutLocked) return;
-
-  const raw = payoutInput.value.trim();
-  if (!raw) return;
-
-  const val = parseFloat(raw);
-  const correct = getCurrentPayoutCorrectValue();
-
-  if (Math.abs(val - correct) < 0.01) {
-    payoutLocked = true;
-    payoutInput.disabled = true;
-    payoutFeedback.innerText = '✅ CORRECT';
-    payoutFeedback.style.color = 'var(--success)';
-    streak += 1;
-    document.getElementById('payout-streak').innerText = streak;
-
-    setTimeout(() => {
-      clearPayoutFeedback();
-      setPayoutQuestion(Math.floor(Math.random() * 50) + 1);
-      payoutLocked = false;
-    }, 500);
-  } else {
-    streak = 0;
-    document.getElementById('payout-streak').innerText = streak;
-    triggerPayoutError(`❌ WRONG. $${payoutBet.innerText} pays $${correct.toFixed(2)}`);
-
-    setTimeout(() => {
-      clearPayoutFeedback();
-      setPayoutQuestion(Math.floor(Math.random() * 50) + 1);
-    }, 1500);
+    sprint.feedback = 'Try again';
+    savePayoutState();
   }
 }
 
 function maybeAutoSubmitPayout() {
   if (payoutLocked || payoutInput.disabled) return;
 
-  if (payoutMode === 'sprint') {
+  if (payoutMode === 'random') {
+    payoutState.random.inputValue = payoutInput.value;
+  } else {
+    payoutState.sprint.inputValue = payoutInput.value;
     beginSprintTimerIfNeeded();
   }
+
+  savePayoutState();
 
   const raw = payoutInput.value.trim();
   const correct = getCurrentPayoutCorrectValue();
 
   if (!isAutoSubmittableExact(raw, correct)) return;
 
-  if (payoutMode === 'sprint') {
-    handleSprintAnswer();
-  } else {
+  if (payoutMode === 'random') {
     handleRandomAnswer();
-  }
-}
-
-function setPayoutMode(mode) {
-  payoutMode = mode;
-
-  payoutModeRandomBtn.classList.toggle('active', mode === 'random');
-  payoutModeSprintBtn.classList.toggle('active', mode === 'sprint');
-
-  clearPayoutFeedback();
-
-  if (mode === 'sprint') {
-    startSprint();
   } else {
-    startRandomPractice();
+    handleSprintAnswer();
   }
 }
 
@@ -762,15 +1188,30 @@ payoutInput.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
 
   if (payoutMode === 'sprint') {
+    beginSprintTimerIfNeeded();
     handleSprintAnswer();
   } else {
     handleRandomAnswer();
   }
 });
 
-/* ---------- TABS ---------- */
-
 function switchTab(mode) {
+  if (mode === activeTab) return;
+
+  if (activeTab === 'game') {
+    pauseGame();
+  }
+
+  if (activeTab === 'payout') {
+    pauseSprintTimerProgress();
+    cancelPayoutAdvanceTimer();
+    savePayoutState();
+  }
+
+  activeTab = mode;
+  saveAppState();
+  updateCenterConsoleVisibility();
+
   document.querySelectorAll('.tabs button').forEach((button) => {
     button.classList.remove('active');
   });
@@ -778,37 +1219,18 @@ function switchTab(mode) {
   document.getElementById(`tab-${mode}`).classList.add('active');
 
   if (mode === 'game') {
-    stopSprintTimer();
-    sprintActive = false;
-
     document.getElementById('payout-mode').style.display = 'none';
     document.getElementById('game-mode').style.display = 'grid';
-
-    if (!roundActive) {
-      setTimeout(() => {
-        if (!roundActive && isGameVisible()) {
-          startRound();
-        }
-      }, 220);
-    }
+    renderTable();
+    resumeGame();
   } else {
-    cancelNextRoundTimer();
-    roundActive = false;
-    activePlayerIdx = -1;
-    activeHandIdx = -1;
     hud.classList.add('hud-hidden');
-    dealBtn.style.display = 'none';
-
     document.getElementById('game-mode').style.display = 'none';
     document.getElementById('payout-mode').style.display = 'grid';
-
-    renderTable();
-    setPayoutMode(payoutMode);
-    setTimeout(updatePayoutScale, 20);
+    renderPayoutMode();
+    updatePayoutFitScale();
   }
 }
-
-/* ---------- RESPONSIVE SCALE ---------- */
 
 function updateTableScale() {
   const shell = document.getElementById('table-shell');
@@ -824,58 +1246,81 @@ function updateTableScale() {
   document.documentElement.style.setProperty('--table-scale', safeScale.toFixed(3));
 }
 
-function updatePayoutScale() {
-  if (getComputedStyle(payoutModeEl).display === 'none') return;
-
-  const rect = payoutModeEl.getBoundingClientRect();
-  const designWidth = 560;
-  const designHeight = payoutMode === 'sprint' ? 700 : 520;
-
-  const horizontalPadding = 28;
-  const verticalPadding = 24;
-
-  const availableWidth = Math.max(280, rect.width - horizontalPadding * 2);
-  const availableHeight = Math.max(280, rect.height - verticalPadding * 2);
-
-  const scale = Math.min(
-    1,
-    availableWidth / designWidth,
-    availableHeight / designHeight
-  );
-
-  document.documentElement.style.setProperty('--payout-scale', scale.toFixed(3));
-  document.documentElement.style.setProperty('--payout-design-height', `${designHeight}px`);
-}
-
 window.addEventListener('resize', () => {
   updateTableScale();
-  updatePayoutScale();
+  updatePayoutFitScale();
 });
 
 window.addEventListener('orientationchange', () => {
   updateTableScale();
-  updatePayoutScale();
+  updatePayoutFitScale();
+});
+
+window.addEventListener('beforeunload', () => {
+  pauseGame();
+  pauseSprintTimerProgress();
+  cancelPayoutAdvanceTimer();
+  savePayoutState();
+  saveAppState();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    pauseGame();
+    pauseSprintTimerProgress();
+    cancelPayoutAdvanceTimer();
+    savePayoutState();
+  } else {
+    if (activeTab === 'game') {
+      resumeGame();
+    } else {
+      renderPayoutMode();
+    }
+  }
 });
 
 window.addEventListener('load', () => {
-  buildDeck();
+  loadAppState();
+
+  const restoredGame = restoreGameState();
+  const restoredPayout = restorePayoutState();
+
+  if (!restoredGame) {
+    buildDeck();
+    renderTable();
+    saveGameState();
+  }
+
+  if (!restoredPayout) {
+    initDefaultPayoutState();
+  }
+
   updateTableScale();
-  updatePayoutScale();
-  updateSprintBestUI();
-  renderTable();
-  setTimeout(startRound, 350);
+  updateCenterConsoleVisibility();
+  updatePayoutFitScale();
+
+  document.getElementById('game-mode').style.display = activeTab === 'game' ? 'grid' : 'none';
+  document.getElementById('payout-mode').style.display = activeTab === 'payout' ? 'grid' : 'none';
+  document.getElementById('tab-game').classList.toggle('active', activeTab === 'game');
+  document.getElementById('tab-payout').classList.toggle('active', activeTab === 'payout');
+
+  if (activeTab === 'game') {
+    resumeGame();
+  } else {
+    renderPayoutMode();
+  }
 });
 
 if ('ResizeObserver' in window) {
   const resizeObserver = new ResizeObserver(() => {
     updateTableScale();
-    updatePayoutScale();
+    updatePayoutFitScale();
   });
 
   window.addEventListener('load', () => {
     const tableShell = document.getElementById('table-shell');
     if (tableShell) resizeObserver.observe(tableShell);
     if (payoutModeEl) resizeObserver.observe(payoutModeEl);
-    if (payoutShell) resizeObserver.observe(payoutShell);
+    if (payoutWidget) resizeObserver.observe(payoutWidget);
   });
 }
