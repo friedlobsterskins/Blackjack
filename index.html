@@ -49,8 +49,8 @@
           </section>
 
           <section class="table-copy">
-            <div class="felt-text">BLACKJACK PAYS 3 TO 2</div>
-            <div class="felt-text subtle">INSURANCE PAYS 2 TO 1</div>
+            <div class="felt-text">HOUSE STRATEGY</div>
+            <div class="felt-text subtle">DEALER MUST DRAW TO 16 • SOFT 17 RULE AS POSTED</div>
           </section>
 
           <section class="players-row" id="players-arc"></section>
@@ -71,34 +71,41 @@
 
         <p id="payout-description">Enter the correct 3:2 payout for the bet below.</p>
 
-        <div class="payout-meta">
-          <div class="meta-pill" id="meta-pill-progress">
-            <span class="meta-label" id="payout-progress-label">Progress</span>
+        <div class="random-meta" id="random-meta">
+          <div class="meta-pill wide-pill current-streak-pill">
+            <span class="meta-label">Current streak 🔥</span>
+            <strong id="random-current-streak">0</strong>
+          </div>
+          <div class="meta-pill wide-pill">
+            <span class="meta-label">Best streak</span>
+            <strong id="random-best-streak">0</strong>
+          </div>
+        </div>
+
+        <div class="sprint-meta" id="sprint-meta">
+          <div class="meta-pill">
+            <span class="meta-label">Progress</span>
             <strong id="payout-progress">1 / 50</strong>
           </div>
-          <div class="meta-pill" id="meta-pill-timer">
-            <span class="meta-label" id="payout-timer-label">Time</span>
+          <div class="meta-pill">
+            <span class="meta-label">Time</span>
             <strong id="payout-timer">00:00.00</strong>
           </div>
-          <div class="meta-pill" id="meta-pill-best">
-            <span class="meta-label" id="payout-best-label">Best</span>
-            <strong id="payout-best">--:--.--</strong>
+          <div class="meta-pill current-streak-pill">
+            <span class="meta-label">Current streak 🔥</span>
+            <strong id="sprint-current-streak">0</strong>
+          </div>
+          <div class="meta-pill">
+            <span class="meta-label">Best streak</span>
+            <strong id="sprint-best-streak">0</strong>
           </div>
         </div>
 
         <div class="bet-amount">$<span id="payout-bet"></span></div>
 
-        <input type="number" id="payout-input" step="0.5" placeholder="0.00" />
+        <input type="number" id="payout-input" step="any" placeholder="0.00" inputmode="decimal" />
 
         <div id="payout-feedback" class="feedback-text"></div>
-
-        <div class="streak-counter" id="payout-random-streak">
-          Current streak: <span id="payout-streak">0</span> 🔥
-        </div>
-
-        <div class="sprint-hint" id="payout-sprint-hint">
-          Answer every payout from $1 to $50 in order. Click Sprint 1–50 again to restart.
-        </div>
       </div>
     </div>
   </main>
