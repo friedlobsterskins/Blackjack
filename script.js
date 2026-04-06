@@ -23,6 +23,7 @@ let isClearingRound = false;
 let gamePaused = false;
 let gamePhase = { type: 'idle' };
 let activeTab = 'game';
+let responsiveSyncFrame = null;
 
 let payoutMode = 'random';
 let payoutLocked = false;
@@ -74,6 +75,7 @@ const payoutTimer = document.getElementById('payout-timer');
 const randomCurrentStreakEl = document.getElementById('random-current-streak');
 const randomBestStreakEl = document.getElementById('random-best-streak');
 const sprintBestTimeEl = document.getElementById('sprint-best-time');
+const payoutActionsEl = document.querySelector('.payout-actions');
 const payoutResetBtn = document.getElementById('payout-reset-btn');
 const payoutRestartBtn = document.getElementById('payout-restart-btn');
 
@@ -334,39 +336,110 @@ function updateCenterConsoleVisibility() {
   centerConsole.classList.toggle('console-hidden', activeTab !== 'game');
 }
 
+function isTouchPhoneViewport(viewportWidth = window.innerWidth, viewportHeight = window.innerHeight) {
+  const supportsMatchMedia = typeof window.matchMedia === 'function';
+  const hasCoarsePointer = supportsMatchMedia ? window.matchMedia('(pointer: coarse)').matches : navigator.maxTouchPoints > 0;
+  const hasNoHover = supportsMatchMedia ? window.matchMedia('(hover: none)').matches : true;
+  const shortEdge = Math.min(viewportWidth, viewportHeight);
+  const longEdge = Math.max(viewportWidth, viewportHeight);
+
+  return Boolean(hasCoarsePointer && hasNoHover && shortEdge <= 480 && longEdge <= 980);
+}
+
+function isIOSLikeDevice() {
+  const userAgent = navigator.userAgent || '';
+  const platform = navigator.platform || '';
+
+  return /iPhone|iPad|iPod/i.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 function updateViewportMetrics() {
   const topbar = document.querySelector('.topbar');
   const viewport = window.visualViewport;
   const viewportHeight = viewport ? viewport.height : window.innerHeight;
   const viewportWidth = viewport ? viewport.width : window.innerWidth;
+  const viewportOffsetTop = viewport ? viewport.offsetTop : 0;
   const topbarHeight = topbar ? Math.ceil(topbar.getBoundingClientRect().height) : 84;
-  const availableHeight = Math.max(320, viewportHeight - topbarHeight - 8);
+  const isPhoneViewport = isTouchPhoneViewport(viewportWidth, viewportHeight);
+  const keyboardInset = viewport
+    ? Math.max(0, Math.round(window.innerHeight - viewport.height - viewportOffsetTop))
+    : 0;
+  const isKeyboardOpen = isPhoneViewport && keyboardInset > 120;
+  const availableHeight = Math.max(
+    isPhoneViewport ? 260 : 320,
+    Math.round(viewportHeight - topbarHeight - (isPhoneViewport ? 4 : 8))
+  );
 
   document.documentElement.style.setProperty('--topbar-height', `${topbarHeight}px`);
   document.documentElement.style.setProperty('--app-available-height', `${availableHeight}px`);
+  document.documentElement.style.setProperty('--keyboard-height', `${keyboardInset}px`);
 
-  return { viewportWidth, viewportHeight, topbarHeight, availableHeight };
+  document.body.classList.toggle('phone-ui', isPhoneViewport);
+  document.body.classList.toggle('ios-ui', isIOSLikeDevice());
+  document.body.classList.toggle('keyboard-open', isKeyboardOpen);
+  document.body.classList.toggle('keyboard-game', isKeyboardOpen && activeTab === 'game');
+  document.body.classList.toggle('keyboard-payout', isKeyboardOpen && activeTab === 'payout');
+  document.body.classList.toggle('game-active', activeTab === 'game');
+  document.body.classList.toggle('payout-active', activeTab === 'payout');
+
+  return {
+    viewportWidth,
+    viewportHeight,
+    topbarHeight,
+    availableHeight,
+    keyboardInset,
+    isPhoneViewport,
+    isKeyboardOpen
+  };
 }
 
-function updatePayoutFitScale() {
-  const { viewportWidth, availableHeight } = updateViewportMetrics();
+function updatePayoutFitScale(metrics = updateViewportMetrics()) {
+  const { viewportWidth, availableHeight, isPhoneViewport, isKeyboardOpen } = metrics;
 
   if (!payoutModeEl || !payoutWidget || !isPayoutVisible()) return;
 
-  payoutModeEl.classList.remove('payout-tablet', 'payout-phone');
+  payoutModeEl.classList.remove('payout-tablet', 'payout-phone', 'payout-keyboard-open');
 
-  const widthScale = viewportWidth / 1440;
-  const heightScale = availableHeight / 860;
-  const payoutScale = Math.max(0.92, Math.min(1.14, Math.min(widthScale, heightScale) * 1.05));
+  let payoutScale;
+
+  if (isPhoneViewport) {
+    const widthScale = viewportWidth / 420;
+    const heightScale = availableHeight / (isKeyboardOpen ? 690 : 820);
+    payoutScale = Math.max(0.72, Math.min(1.02, Math.min(widthScale, heightScale)));
+  } else {
+    const widthScale = viewportWidth / 1440;
+    const heightScale = availableHeight / 860;
+    payoutScale = Math.max(0.92, Math.min(1.14, Math.min(widthScale, heightScale) * 1.05));
+  }
+
   payoutModeEl.style.setProperty('--payout-scale', payoutScale.toFixed(3));
 
-  if (viewportWidth <= 1120 || availableHeight <= 780) {
+  if (!isPhoneViewport && (viewportWidth <= 1120 || availableHeight <= 780)) {
     payoutModeEl.classList.add('payout-tablet');
   }
 
-  if (viewportWidth <= 760 || (viewportWidth <= 900 && availableHeight <= 700)) {
+  if (isPhoneViewport || viewportWidth <= 760 || (viewportWidth <= 900 && availableHeight <= 700)) {
     payoutModeEl.classList.add('payout-phone');
   }
+
+  if (isPhoneViewport && isKeyboardOpen) {
+    payoutModeEl.classList.add('payout-keyboard-open');
+  }
+}
+
+function syncResponsiveLayout() {
+  const metrics = updateViewportMetrics();
+  updateTableScale(metrics);
+  updatePayoutFitScale(metrics);
+}
+
+function scheduleResponsiveLayout() {
+  if (responsiveSyncFrame) return;
+
+  responsiveSyncFrame = requestAnimationFrame(() => {
+    responsiveSyncFrame = null;
+    syncResponsiveLayout();
+  });
 }
 
 async function clearTableForNextRound() {
@@ -894,6 +967,7 @@ function updateRandomUI() {
   payoutLocked = Boolean(random.pendingAdvance);
   setPayoutQuestion(random.currentBet, random.inputValue);
   payoutInput.disabled = payoutLocked;
+  payoutActionsEl?.classList.add('single-action');
   payoutResetBtn.innerText = 'Reset';
   payoutRestartBtn.classList.remove('visible');
   setPayoutFeedback(random.feedback, random.pendingFeedbackType || '');
@@ -914,6 +988,7 @@ function updateSprintUI() {
   setPayoutQuestion(sprint.currentBet, sprint.inputValue);
   payoutInput.disabled = sprint.completed;
   payoutInput.placeholder = sprint.completed ? 'Done' : '0.00';
+  payoutActionsEl?.classList.toggle('single-action', !sprint.completed);
   payoutResetBtn.innerText = 'Reset';
   payoutRestartBtn.classList.toggle('visible', sprint.completed);
   setPayoutFeedback(sprint.feedback, sprint.completed ? 'success' : '');
@@ -1127,7 +1202,7 @@ function isAutoSubmittableExact(rawValue, correct) {
 
 function shouldAutoSubmitPayout() {
   const supportsMatchMedia = typeof window.matchMedia === 'function';
-  const isPhoneLayout = payoutModeEl?.classList.contains('payout-phone');
+  const isPhoneLayout = document.body.classList.contains('phone-ui');
   const hasCoarsePointer = supportsMatchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
   const hasNoHover = supportsMatchMedia ? window.matchMedia('(hover: none)').matches : false;
 
@@ -1296,50 +1371,46 @@ function switchTab(mode) {
     document.getElementById('game-mode').style.display = 'grid';
     renderTable();
     resumeGame();
+    scheduleResponsiveLayout();
   } else {
     hud.classList.add('hud-hidden');
     document.getElementById('game-mode').style.display = 'none';
     document.getElementById('payout-mode').style.display = 'grid';
     renderPayoutMode();
-    updatePayoutFitScale();
+    scheduleResponsiveLayout();
   }
 }
 
-function updateTableScale() {
-  updateViewportMetrics();
-
+function updateTableScale(metrics = updateViewportMetrics()) {
   const shell = document.getElementById('table-shell');
   if (!shell) return;
 
   const rect = shell.getBoundingClientRect();
-  const designWidth = 1500;
-  const designHeight = 720;
+  if (rect.width <= 0 || rect.height <= 0) return;
+
+  const isPhoneViewport = metrics.isPhoneViewport || document.body.classList.contains('phone-ui');
+  const designWidth = isPhoneViewport ? 1080 : 1500;
+  const designHeight = isPhoneViewport ? 980 : 720;
 
   const scale = Math.min(rect.width / designWidth, rect.height / designHeight);
-  const safeScale = Math.max(0.56, Math.min(0.97, scale));
+  const safeScale = isPhoneViewport
+    ? Math.max(0.3, Math.min(0.9, scale))
+    : Math.max(0.56, Math.min(0.97, scale));
 
   document.documentElement.style.setProperty('--table-scale', safeScale.toFixed(3));
 }
 
 window.addEventListener('resize', () => {
-  updateViewportMetrics();
-  updateTableScale();
-  updatePayoutFitScale();
+  scheduleResponsiveLayout();
 });
 
 window.addEventListener('orientationchange', () => {
-  updateViewportMetrics();
-  updateTableScale();
-  updatePayoutFitScale();
+  scheduleResponsiveLayout();
 });
 
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    updateViewportMetrics();
-    updateTableScale();
-    updatePayoutFitScale();
-  });
-  window.visualViewport.addEventListener('scroll', updatePayoutFitScale);
+  window.visualViewport.addEventListener('resize', scheduleResponsiveLayout);
+  window.visualViewport.addEventListener('scroll', scheduleResponsiveLayout);
 }
 
 window.addEventListener('beforeunload', () => {
@@ -1380,10 +1451,8 @@ window.addEventListener('load', () => {
     initDefaultPayoutState();
   }
 
-  updateViewportMetrics();
-  updateTableScale();
+  syncResponsiveLayout();
   updateCenterConsoleVisibility();
-  updatePayoutFitScale();
 
   document.getElementById('game-mode').style.display = activeTab === 'game' ? 'grid' : 'none';
   document.getElementById('payout-mode').style.display = activeTab === 'payout' ? 'grid' : 'none';
@@ -1399,8 +1468,7 @@ window.addEventListener('load', () => {
 
 if ('ResizeObserver' in window) {
   const resizeObserver = new ResizeObserver(() => {
-    updateTableScale();
-    updatePayoutFitScale();
+    scheduleResponsiveLayout();
   });
 
   window.addEventListener('load', () => {
