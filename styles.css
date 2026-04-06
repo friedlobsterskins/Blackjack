@@ -19,6 +19,7 @@
   --table-scale: 1;
   --topbar-height: 84px;
   --app-frame-pad: clamp(10px, 1vw, 16px);
+  --keyboard-height: 0px;
   --app-available-height: calc(100dvh - var(--topbar-height));
 }
 
@@ -28,7 +29,9 @@
 
 html,
 body {
+  height: 100%;
   min-height: 100%;
+  background: #04101a;
 }
 
 body {
@@ -37,6 +40,9 @@ body {
   color: var(--text);
   background: radial-gradient(circle at top, #12263b 0%, #06111b 42%, #02060a 100%);
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
 
@@ -1559,5 +1565,586 @@ input[type="number"] {
 
   .table-copy {
     transform: translateY(calc(-14px * var(--table-scale)));
+  }
+}
+
+@media (max-width: 760px) {
+  body.phone-ui {
+    background:
+      radial-gradient(circle at 16% 0%, rgba(240, 207, 115, 0.1) 0%, transparent 24%),
+      radial-gradient(circle at 84% 10%, rgba(83, 182, 125, 0.12) 0%, transparent 22%),
+      linear-gradient(180deg, #07111c 0%, #04101a 42%, #02060a 100%);
+  }
+
+  body.phone-ui .topbar {
+    min-height: 0;
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      12px
+      max(14px, env(safe-area-inset-left));
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  body.phone-ui .brand {
+    flex: 0 0 auto;
+  }
+
+  body.phone-ui .brand h1 {
+    font-size: clamp(18px, 6vw, 24px);
+    line-height: 0.98;
+  }
+
+  body.phone-ui .brand span {
+    margin-top: 6px;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+  }
+
+  body.phone-ui .tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-left: 0;
+  }
+
+  body.phone-ui .tabs button {
+    width: 100%;
+    min-width: 0;
+    height: 46px;
+    padding: 0 14px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  body.phone-ui .topbar-center {
+    position: static;
+    left: auto;
+    top: auto;
+    width: 100%;
+    transform: none;
+    justify-content: stretch;
+    pointer-events: auto;
+  }
+
+  body.phone-ui #center-console {
+    width: 100%;
+    min-height: 0;
+    justify-content: stretch;
+  }
+
+  body.phone-ui #deal-btn,
+  body.phone-ui #action-hud {
+    width: 100%;
+  }
+
+  body.phone-ui #deal-btn {
+    height: 50px;
+    padding: 0 18px;
+    border-radius: 16px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+
+  body.phone-ui #action-hud {
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 18px;
+    justify-content: space-between;
+  }
+
+  body.phone-ui .hud-text {
+    min-width: 0;
+  }
+
+  body.phone-ui #hud-title {
+    font-size: 12px;
+    line-height: 1.15;
+  }
+
+  body.phone-ui #hud-input {
+    width: 88px;
+    min-width: 88px;
+    height: 44px;
+    border-radius: 14px;
+    font-size: 24px;
+  }
+
+  body.phone-ui #game-mode,
+  body.phone-ui #payout-mode {
+    padding:
+      12px
+      max(14px, env(safe-area-inset-right))
+      calc(14px + env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  body.phone-ui #game-mode::-webkit-scrollbar,
+  body.phone-ui #payout-mode::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.phone-ui #game-mode {
+    place-items: stretch;
+  }
+
+  body.phone-ui .table-shell {
+    width: min(100%, 480px);
+    height: 100%;
+    min-height: max(460px, calc(var(--app-available-height) - 6px));
+    max-height: 820px;
+    margin: 0 auto;
+    aspect-ratio: auto;
+  }
+
+  body.phone-ui .table-shell::before {
+    inset: 6% 8% 10%;
+    filter: blur(34px);
+  }
+
+  body.phone-ui .table-shell::after {
+    inset: 10% 18% auto;
+    height: 24%;
+    filter: blur(28px);
+  }
+
+  body.phone-ui .table-rail {
+    padding: 12px;
+    border-radius: 46px 46px 24px 24px;
+  }
+
+  body.phone-ui .table-felt {
+    grid-template-rows: auto auto 1fr;
+    border-radius: 36px 36px 20px 20px;
+  }
+
+  body.phone-ui .table-felt::before {
+    inset: 12px;
+  }
+
+  body.phone-ui .table-felt::after {
+    bottom: 16px;
+    width: 88%;
+    height: 88px;
+    border-width: 1px;
+    border-radius: 180px 180px 0 0;
+  }
+
+  body.phone-ui .table-glow {
+    inset: auto 0 -24px 0;
+    height: 116px;
+    filter: blur(24px);
+  }
+
+  body.phone-ui .dealer-zone {
+    gap: 10px;
+    padding: 20px 14px 8px;
+  }
+
+  body.phone-ui .dealer-caption {
+    font-size: clamp(10px, 2.8vw, 12px);
+    letter-spacing: 0.18em;
+  }
+
+  body.phone-ui .dealer-spot {
+    min-height: 112px;
+  }
+
+  body.phone-ui .table-copy {
+    padding: 2px 18px 8px;
+    transform: none;
+  }
+
+  body.phone-ui .felt-text.subtle {
+    font-size: clamp(9px, 2.8vw, 12px);
+    line-height: 1.35;
+  }
+
+  body.phone-ui .status-text {
+    min-height: 24px;
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+
+  body.phone-ui .players-row {
+    gap: 10px;
+    padding: 0 12px 18px;
+  }
+
+  body.phone-ui .player-spot {
+    gap: 8px;
+    padding-bottom: 0;
+  }
+
+  body.phone-ui .seat-arc {
+    bottom: 28px;
+    width: min(100%, 132px);
+    height: 70px;
+    border-width: 1px;
+    border-radius: 120px 120px 0 0;
+  }
+
+  body.phone-ui .hands-row {
+    min-height: 92px;
+    gap: 8px;
+  }
+
+  body.phone-ui .hand {
+    min-height: 90px;
+  }
+
+  body.phone-ui .bet-area {
+    width: clamp(42px, calc(76px * var(--table-scale)), 66px);
+    height: clamp(42px, calc(76px * var(--table-scale)), 66px);
+  }
+
+  body.phone-ui .chip {
+    width: clamp(30px, calc(50px * var(--table-scale)), 46px);
+    height: clamp(30px, calc(50px * var(--table-scale)), 46px);
+    font-size: clamp(8px, calc(11px * var(--table-scale)), 11px);
+  }
+
+  body.phone-ui .chip::before {
+    inset: 4px;
+  }
+
+  body.phone-ui .spot-name {
+    font-size: 8px;
+    letter-spacing: 0.14em;
+  }
+
+  body.phone-ui .card {
+    width: clamp(34px, calc(88px * var(--table-scale)), 62px);
+    height: clamp(50px, calc(124px * var(--table-scale)), 92px);
+    border-radius: 8px;
+    box-shadow: -5px 7px 12px rgba(0, 0, 0, 0.22), 0 0 12px rgba(255, 255, 255, 0.05);
+  }
+
+  body.phone-ui .card + .card {
+    margin-left: calc(-14px - 10px * var(--table-scale));
+  }
+
+  body.phone-ui .card.hidden::after {
+    inset: 6px;
+    border-radius: 4px;
+  }
+
+  body.phone-ui .card-corner-top {
+    top: 4px;
+    left: 5px;
+  }
+
+  body.phone-ui .card-corner-bottom {
+    right: 5px;
+    bottom: 4px;
+  }
+
+  body.phone-ui .card-rank {
+    font-size: clamp(10px, calc(16px * var(--table-scale)), 16px);
+  }
+
+  body.phone-ui .card-suit-mini {
+    font-size: clamp(8px, calc(12px * var(--table-scale)), 12px);
+  }
+
+  body.phone-ui .card-center {
+    font-size: clamp(18px, calc(32px * var(--table-scale)), 32px);
+  }
+
+  body.phone-ui .card.sideways {
+    transform: rotate(-90deg) translateX(calc(-8px - 3px * var(--table-scale))) translateY(calc(18px + 4px * var(--table-scale)));
+    margin-left: calc(-8px - 2px * var(--table-scale));
+  }
+
+  body.phone-ui.keyboard-game .table-shell {
+    min-height: max(400px, calc(var(--app-available-height) - 2px));
+  }
+
+  body.phone-ui.keyboard-game .dealer-zone {
+    padding-top: 16px;
+  }
+
+  body.phone-ui.keyboard-game .table-copy {
+    padding-bottom: 4px;
+  }
+
+  body.phone-ui.keyboard-game .players-row {
+    padding-bottom: 12px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone {
+    padding-top: 10px;
+  }
+
+  body.phone-ui .payout-shell {
+    width: min(100%, 480px);
+    height: 100%;
+    margin: 0 auto;
+    align-items: stretch;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-widget {
+    height: auto;
+    min-height: max(560px, calc(var(--app-available-height) - 2px));
+    padding: 12px;
+    gap: 12px;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(280px, 0.95fr) auto;
+    border-radius: 28px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-panel-stage {
+    order: 1;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-panel-info {
+    order: 2;
+    height: auto;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-heading {
+    gap: 8px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-kicker {
+    padding: 7px 11px;
+    font-size: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-heading h2 {
+    max-width: none;
+    font-size: clamp(28px, 12vw, 46px);
+    line-height: 0.92;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-heading p {
+    max-width: 24ch;
+    font-size: clamp(14px, 4.3vw, 17px);
+    line-height: 1.38;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-submodes {
+    width: 100%;
+    padding: 6px;
+    gap: 6px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-submodes button {
+    height: 46px;
+    padding: 0 12px;
+    font-size: clamp(15px, 4.4vw, 18px);
+  }
+
+  body.phone-ui #payout-mode.payout-phone .random-meta,
+  body.phone-ui #payout-mode.payout-phone .sprint-meta {
+    gap: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .random-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.phone-ui #payout-mode.payout-phone .sprint-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  body.phone-ui #payout-mode.payout-phone .meta-pill {
+    min-height: 86px;
+    padding: 12px 12px 13px;
+    border-radius: 20px;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    text-align: left;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .meta-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .meta-pill strong {
+    width: 100%;
+    font-size: clamp(22px, 7vw, 30px);
+    line-height: 0.98;
+  }
+
+  body.phone-ui #payout-mode.payout-phone #payout-timer {
+    font-size: clamp(18px, 5.9vw, 26px);
+    letter-spacing: -0.05em;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-stage-card {
+    padding: 16px 16px 18px;
+    border-radius: 24px;
+    grid-template-rows: auto 1fr auto auto auto auto;
+    gap: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-stage-card::before {
+    width: min(76vw, 280px);
+    opacity: 0.48;
+    filter: blur(14px);
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-stage-card::after {
+    inset: auto -36px -42px auto;
+    width: 140px;
+    height: 140px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-stage-header {
+    gap: 8px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .stage-kicker,
+  body.phone-ui #payout-mode.payout-phone .stage-ratio {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .bet-amount {
+    font-size: clamp(64px, 23vw, 108px);
+    text-shadow: 0 10px 22px rgba(34, 197, 94, 0.1);
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-answer-label {
+    font-size: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone #payout-input {
+    width: 100%;
+    height: 60px;
+    max-width: none;
+    border-radius: 18px;
+    font-size: clamp(26px, 8vw, 34px);
+  }
+
+  body.phone-ui #payout-mode.payout-phone .feedback-text {
+    min-height: 1.3em;
+    font-size: 14px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-actions.single-action {
+    grid-template-columns: 1fr;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-reset-btn,
+  body.phone-ui #payout-mode.payout-phone .payout-restart-btn {
+    width: 100%;
+    min-width: 0;
+    height: 46px;
+    padding: 0 14px;
+    border-radius: 16px;
+    font-size: 11px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-widget {
+    min-height: max(480px, calc(var(--app-available-height) - 2px));
+    grid-template-rows: minmax(240px, 1fr) auto;
+    gap: 10px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-kicker,
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-heading p {
+    display: none;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-heading h2 {
+    font-size: clamp(22px, 9vw, 34px);
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-panel-info {
+    gap: 8px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-submodes button {
+    height: 40px;
+    font-size: 14px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .meta-pill {
+    min-height: 70px;
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .meta-label {
+    font-size: 9px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .meta-pill strong {
+    font-size: clamp(18px, 5.8vw, 24px);
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone #payout-timer {
+    font-size: clamp(16px, 5vw, 22px);
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-stage-card {
+    padding: 14px;
+    gap: 8px;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-stage-card::before {
+    width: min(70vw, 240px);
+    opacity: 0.42;
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .bet-amount {
+    font-size: clamp(52px, 18vw, 84px);
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone #payout-input {
+    height: 54px;
+    font-size: clamp(24px, 7vw, 30px);
+  }
+
+  body.phone-ui.keyboard-payout #payout-mode.payout-phone .payout-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 740px) {
+  body.phone-ui .table-shell {
+    min-height: max(420px, calc(var(--app-available-height) - 2px));
+  }
+
+  body.phone-ui .dealer-zone {
+    padding-top: 16px;
+  }
+
+  body.phone-ui .players-row {
+    padding-bottom: 14px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .payout-widget {
+    min-height: max(520px, calc(var(--app-available-height) - 2px));
+  }
+
+  body.phone-ui #payout-mode.payout-phone .meta-pill {
+    min-height: 78px;
+  }
+
+  body.phone-ui #payout-mode.payout-phone .bet-amount {
+    font-size: clamp(58px, 20vw, 96px);
   }
 }
