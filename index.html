@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Lac-Leamy Dealer Trainer</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
@@ -49,8 +49,7 @@
           </section>
 
           <section class="table-copy">
-            <div class="felt-text">HOUSE STRATEGY</div>
-            <div class="felt-text subtle">DEALER MUST DRAW TO 16 • SOFT 17 RULE AS POSTED</div>
+            <div class="felt-text subtle">DEALER MUST DRAW TO 16 AND HIT SOFT 17</div>
           </section>
 
           <section class="players-row" id="players-arc"></section>
@@ -62,50 +61,64 @@
   <main id="payout-mode" style="display: none;">
     <div class="payout-shell" id="payout-shell">
       <div class="payout-widget random-mode" id="payout-widget">
-        <h2>BLACKJACK PAYOUT</h2>
-
-        <div class="payout-submodes">
-          <button id="payout-mode-random" class="active" onclick="setPayoutMode('random')">Random</button>
-          <button id="payout-mode-sprint" onclick="setPayoutMode('sprint')">Sprint 1–50</button>
-        </div>
-
-        <p id="payout-description">Enter the correct 3:2 payout for the bet below.</p>
-
-        <div class="random-meta" id="random-meta">
-          <div class="meta-pill wide-pill current-streak-pill">
-            <span class="meta-label">Current streak 🔥</span>
-            <strong id="random-current-streak">0</strong>
+        <section class="payout-panel payout-panel-info">
+          <div class="payout-heading">
+            <span class="payout-kicker">Precision Drill</span>
+            <h2>Blackjack Payouts</h2>
+            <p id="payout-description">Enter the correct 3:2 payout for the bet below.</p>
           </div>
-          <div class="meta-pill wide-pill">
-            <span class="meta-label">Best streak</span>
-            <strong id="random-best-streak">0</strong>
-          </div>
-        </div>
 
-        <div class="sprint-meta" id="sprint-meta">
-          <div class="meta-pill">
-            <span class="meta-label">Progress</span>
-            <strong id="payout-progress">1 / 50</strong>
+          <div class="payout-submodes">
+            <button id="payout-mode-random" class="active" onclick="setPayoutMode('random')">Random</button>
+            <button id="payout-mode-sprint" onclick="setPayoutMode('sprint')">Sprint 1-50</button>
           </div>
-          <div class="meta-pill">
-            <span class="meta-label">Time</span>
-            <strong id="payout-timer">00:00.00</strong>
-          </div>
-          <div class="meta-pill current-streak-pill">
-            <span class="meta-label">Current streak 🔥</span>
-            <strong id="sprint-current-streak">0</strong>
-          </div>
-          <div class="meta-pill">
-            <span class="meta-label">Best streak</span>
-            <strong id="sprint-best-streak">0</strong>
-          </div>
-        </div>
 
-        <div class="bet-amount">$<span id="payout-bet"></span></div>
+          <div class="random-meta" id="random-meta">
+            <div class="meta-pill current-streak-pill">
+              <span class="meta-label">Current streak</span>
+              <strong id="random-current-streak">0</strong>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">Best streak</span>
+              <strong id="random-best-streak">0</strong>
+            </div>
+          </div>
 
-        <input type="number" id="payout-input" step="any" placeholder="0.00" inputmode="decimal" />
+          <div class="sprint-meta" id="sprint-meta">
+            <div class="meta-pill">
+              <span class="meta-label">Progress</span>
+              <strong id="payout-progress">1 / 50</strong>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">Time</span>
+              <strong id="payout-timer">00:00.00</strong>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">Best time</span>
+              <strong id="sprint-best-time">-</strong>
+            </div>
+          </div>
+        </section>
 
-        <div id="payout-feedback" class="feedback-text"></div>
+        <section class="payout-panel payout-panel-stage">
+          <div class="payout-stage-card">
+            <div class="payout-stage-header">
+              <span class="stage-kicker">Current Bet</span>
+              <span class="stage-ratio">Pays 3:2</span>
+            </div>
+
+            <div class="bet-amount">$<span id="payout-bet"></span></div>
+
+            <label class="payout-answer-label" for="payout-input">Enter payout</label>
+            <input type="number" id="payout-input" step="any" placeholder="0.00" inputmode="decimal" />
+
+            <div id="payout-feedback" class="feedback-text"></div>
+            <div class="payout-actions">
+              <button id="payout-reset-btn" class="payout-reset-btn" type="button" onclick="resetCurrentPayoutModeState()">Reset</button>
+              <button id="payout-restart-btn" class="payout-restart-btn" type="button" onclick="restartSprint()">Restart sprint</button>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   </main>
