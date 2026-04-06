@@ -43,9 +43,8 @@ const payoutState = {
     inputValue: '',
     feedback: '',
     progress: 0,
-    currentStreak: 0,
-    bestStreak: 0,
     elapsedMs: 0,
+    bestCompletedMs: null,
     timerRunning: false,
     timerStartedAt: 0,
     hasStarted: false,
@@ -74,8 +73,9 @@ const payoutProgress = document.getElementById('payout-progress');
 const payoutTimer = document.getElementById('payout-timer');
 const randomCurrentStreakEl = document.getElementById('random-current-streak');
 const randomBestStreakEl = document.getElementById('random-best-streak');
-const sprintCurrentStreakEl = document.getElementById('sprint-current-streak');
-const sprintBestStreakEl = document.getElementById('sprint-best-streak');
+const sprintBestTimeEl = document.getElementById('sprint-best-time');
+const payoutResetBtn = document.getElementById('payout-reset-btn');
+const payoutRestartBtn = document.getElementById('payout-restart-btn');
 
 function safeLocalStorageSet(key, value) {
   try {
@@ -91,6 +91,14 @@ function safeLocalStorageGet(key) {
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
+  }
+}
+
+function safeLocalStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
   }
 }
 
@@ -304,6 +312,16 @@ function cancelGameFlowTimer() {
   }
 }
 
+function focusWithoutScroll(element) {
+  if (!element) return;
+
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    element.focus();
+  }
+}
+
 function isGameVisible() {
   return getComputedStyle(document.getElementById('game-mode')).display !== 'none';
 }
@@ -316,31 +334,39 @@ function updateCenterConsoleVisibility() {
   centerConsole.classList.toggle('console-hidden', activeTab !== 'game');
 }
 
+function updateViewportMetrics() {
+  const topbar = document.querySelector('.topbar');
+  const viewport = window.visualViewport;
+  const viewportHeight = viewport ? viewport.height : window.innerHeight;
+  const viewportWidth = viewport ? viewport.width : window.innerWidth;
+  const topbarHeight = topbar ? Math.ceil(topbar.getBoundingClientRect().height) : 84;
+  const availableHeight = Math.max(320, viewportHeight - topbarHeight - 8);
+
+  document.documentElement.style.setProperty('--topbar-height', `${topbarHeight}px`);
+  document.documentElement.style.setProperty('--app-available-height', `${availableHeight}px`);
+
+  return { viewportWidth, viewportHeight, topbarHeight, availableHeight };
+}
+
 function updatePayoutFitScale() {
-  if (!payoutModeEl || !payoutWidget) return;
-  if (!isPayoutVisible()) return;
+  const { viewportWidth, availableHeight } = updateViewportMetrics();
 
-  document.documentElement.style.setProperty('--payout-fit-scale', '1');
+  if (!payoutModeEl || !payoutWidget || !isPayoutVisible()) return;
 
-  requestAnimationFrame(() => {
-    const modeRect = payoutModeEl.getBoundingClientRect();
+  payoutModeEl.classList.remove('payout-tablet', 'payout-phone');
 
-    const paddingX = 24;
-    const paddingY = 24;
-    const availableWidth = Math.max(240, modeRect.width - paddingX * 2);
-    const availableHeight = Math.max(240, modeRect.height - paddingY * 2);
+  const widthScale = viewportWidth / 1440;
+  const heightScale = availableHeight / 860;
+  const payoutScale = Math.max(0.92, Math.min(1.14, Math.min(widthScale, heightScale) * 1.05));
+  payoutModeEl.style.setProperty('--payout-scale', payoutScale.toFixed(3));
 
-    const naturalWidth = payoutWidget.offsetWidth;
-    const naturalHeight = payoutWidget.offsetHeight;
+  if (viewportWidth <= 1120 || availableHeight <= 780) {
+    payoutModeEl.classList.add('payout-tablet');
+  }
 
-    if (!naturalWidth || !naturalHeight) return;
-
-    const widthScale = availableWidth / naturalWidth;
-    const heightScale = availableHeight / naturalHeight;
-    const scale = Math.min(1, widthScale, heightScale);
-
-    document.documentElement.style.setProperty('--payout-fit-scale', scale.toFixed(4));
-  });
+  if (viewportWidth <= 760 || (viewportWidth <= 900 && availableHeight <= 700)) {
+    payoutModeEl.classList.add('payout-phone');
+  }
 }
 
 async function clearTableForNextRound() {
@@ -372,43 +398,12 @@ async function clearTableForNextRound() {
 }
 
 function saveGameState() {
-  safeLocalStorageSet(STORAGE_KEYS.game, {
-    deck,
-    players,
-    dealer,
-    currentExpectedTotal,
-    actionContext,
-    activePlayerIdx,
-    activeHandIdx,
-    roundActive,
-    gamePaused,
-    gamePhase,
-    dealerStatusText: dealerStatus.innerText,
-    hudTitleText: hudTitle.innerText,
-    hudVisible: !hud.classList.contains('hud-hidden') && activeTab === 'game'
-  });
+  safeLocalStorageRemove(STORAGE_KEYS.game);
 }
 
 function restoreGameState() {
-  const state = safeLocalStorageGet(STORAGE_KEYS.game);
-  if (!state) return false;
-
-  deck = Array.isArray(state.deck) && state.deck.length ? state.deck : [];
-  players = Array.isArray(state.players) ? state.players : [];
-  dealer = state.dealer?.hand ? state.dealer : { hand: [], isRevealed: false };
-  currentExpectedTotal = Number.isFinite(state.currentExpectedTotal) ? state.currentExpectedTotal : 0;
-  actionContext = state.actionContext ?? null;
-  activePlayerIdx = state.activePlayerIdx ?? -1;
-  activeHandIdx = state.activeHandIdx ?? -1;
-  roundActive = Boolean(state.roundActive);
-  gamePaused = true;
-  gamePhase = state.gamePhase ?? { type: 'idle' };
-  dealerStatus.innerText = state.dealerStatusText ?? '';
-  hudTitle.innerText = state.hudTitleText ?? 'SPOT 1 TOTAL';
-  hud.classList.add('hud-hidden');
-  dealBtn.style.display = 'none';
-  renderTable();
-  return players.length > 0 || dealer.hand.length > 0 || roundActive;
+  safeLocalStorageRemove(STORAGE_KEYS.game);
+  return false;
 }
 
 function scheduleGameAction(action, delay = 0) {
@@ -444,7 +439,7 @@ function promptDealer(expected, title, nextAction) {
   saveGameState();
 
   setTimeout(() => {
-    if (roundActive && isGameVisible()) hudInput.focus();
+    if (roundActive && isGameVisible()) focusWithoutScroll(hudInput);
   }, 50);
 }
 
@@ -729,7 +724,7 @@ function resumeGame() {
   if (gamePhase.type === 'prompt') {
     hud.classList.remove('hud-hidden');
     setTimeout(() => {
-      if (isGameVisible()) hudInput.focus();
+      if (isGameVisible()) focusWithoutScroll(hudInput);
     }, 50);
     return;
   }
@@ -804,6 +799,10 @@ function formatTime(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
 }
 
+function formatBestTime(ms) {
+  return Number.isFinite(ms) && ms > 0 ? formatTime(ms) : '—';
+}
+
 function getSprintElapsedMs() {
   if (payoutState.sprint.timerRunning) {
     return payoutState.sprint.elapsedMs + (performance.now() - payoutState.sprint.timerStartedAt);
@@ -858,7 +857,7 @@ function setPayoutQuestion(bet, restoreValue = '') {
   payoutInput.disabled = payoutLocked;
 
   if (isPayoutVisible()) {
-    setTimeout(() => payoutInput.focus(), 0);
+    setTimeout(() => focusWithoutScroll(payoutInput), 0);
   }
 }
 
@@ -895,6 +894,8 @@ function updateRandomUI() {
   payoutLocked = Boolean(random.pendingAdvance);
   setPayoutQuestion(random.currentBet, random.inputValue);
   payoutInput.disabled = payoutLocked;
+  payoutResetBtn.innerText = 'Reset';
+  payoutRestartBtn.classList.remove('visible');
   setPayoutFeedback(random.feedback, random.pendingFeedbackType || '');
 }
 
@@ -903,14 +904,18 @@ function updateSprintUI() {
 
   payoutWidget.classList.remove('random-mode');
   payoutWidget.classList.add('sprint-mode');
-  payoutDescription.innerText = 'Answer every payout from $1 to $50 in order as fast as you can.';
+  payoutDescription.innerText = sprint.completed
+    ? 'Sprint complete. Tap restart to run it again and try to beat your best time.'
+    : 'Answer every payout from $1 to $50 in order as fast as you can.';
   payoutProgress.innerText = `${Math.min(sprint.progress + 1, 50)} / 50`;
-  sprintCurrentStreakEl.innerText = sprint.currentStreak;
-  sprintBestStreakEl.innerText = sprint.bestStreak;
-  updateSprintTimerDisplay();
+  payoutTimer.innerText = formatTime(getSprintElapsedMs());
+  sprintBestTimeEl.innerText = formatBestTime(sprint.bestCompletedMs);
   payoutLocked = false;
   setPayoutQuestion(sprint.currentBet, sprint.inputValue);
   payoutInput.disabled = sprint.completed;
+  payoutInput.placeholder = sprint.completed ? 'Done' : '0.00';
+  payoutResetBtn.innerText = 'Reset';
+  payoutRestartBtn.classList.toggle('visible', sprint.completed);
   setPayoutFeedback(sprint.feedback, sprint.completed ? 'success' : '');
 }
 
@@ -923,6 +928,8 @@ function renderPayoutMode() {
   } else {
     updateSprintUI();
   }
+
+  requestAnimationFrame(updatePayoutFitScale);
 }
 
 function savePayoutState() {
@@ -964,9 +971,8 @@ function restorePayoutState() {
     inputValue: state.sprint?.inputValue ?? '',
     feedback: state.sprint?.feedback ?? '',
     progress: Number.isFinite(state.sprint?.progress) ? state.sprint.progress : 0,
-    currentStreak: Number.isFinite(state.sprint?.currentStreak) ? state.sprint.currentStreak : 0,
-    bestStreak: Number.isFinite(state.sprint?.bestStreak) ? state.sprint.bestStreak : 0,
     elapsedMs: Number.isFinite(state.sprint?.elapsedMs) ? state.sprint.elapsedMs : 0,
+    bestCompletedMs: Number.isFinite(state.sprint?.bestCompletedMs) ? state.sprint.bestCompletedMs : null,
     timerRunning: false,
     timerStartedAt: 0,
     hasStarted: Boolean(state.sprint?.hasStarted),
@@ -994,9 +1000,8 @@ function initDefaultPayoutState() {
   payoutState.sprint.inputValue = '';
   payoutState.sprint.feedback = '';
   payoutState.sprint.progress = 0;
-  payoutState.sprint.currentStreak = 0;
-  payoutState.sprint.bestStreak = 0;
   payoutState.sprint.elapsedMs = 0;
+  payoutState.sprint.bestCompletedMs = null;
   payoutState.sprint.timerRunning = false;
   payoutState.sprint.timerStartedAt = 0;
   payoutState.sprint.hasStarted = false;
@@ -1004,6 +1009,57 @@ function initDefaultPayoutState() {
 
   renderPayoutMode();
   savePayoutState();
+}
+
+function resetRandomModeState() {
+  cancelPayoutAdvanceTimer();
+  payoutLocked = false;
+
+  Object.assign(payoutState.random, {
+    currentBet: getRandomBet(),
+    inputValue: '',
+    feedback: '',
+    currentStreak: 0,
+    bestStreak: 0,
+    pendingAdvance: null,
+    pendingFeedbackType: ''
+  });
+}
+
+function resetSprintModeState(preserveBest = false) {
+  cancelPayoutAdvanceTimer();
+  pauseSprintTimerProgress();
+  payoutLocked = false;
+
+  const bestCompletedMs = preserveBest ? payoutState.sprint.bestCompletedMs : null;
+
+  Object.assign(payoutState.sprint, {
+    currentBet: 1,
+    inputValue: '',
+    feedback: '',
+    progress: 0,
+    elapsedMs: 0,
+    bestCompletedMs: Number.isFinite(bestCompletedMs) ? bestCompletedMs : null,
+    timerRunning: false,
+    timerStartedAt: 0,
+    hasStarted: false,
+    completed: false
+  });
+}
+
+function resetCurrentPayoutModeState() {
+  if (payoutMode === 'random') {
+    resetRandomModeState();
+  } else {
+    resetSprintModeState(false);
+  }
+
+  renderPayoutMode();
+  savePayoutState();
+
+  if (isPayoutVisible()) {
+    setTimeout(() => focusWithoutScroll(payoutInput), 40);
+  }
 }
 
 function completePendingRandomAdvance() {
@@ -1034,17 +1090,8 @@ function scheduleRandomAdvance(delay) {
 function setPayoutMode(mode) {
   if (mode === payoutMode) {
     if (mode === 'sprint') {
-      pauseSprintTimerProgress();
-      payoutState.sprint.currentBet = 1;
-      payoutState.sprint.inputValue = '';
-      payoutState.sprint.feedback = '';
-      payoutState.sprint.progress = 0;
-      payoutState.sprint.currentStreak = 0;
-      payoutState.sprint.elapsedMs = 0;
-      payoutState.sprint.timerRunning = false;
-      payoutState.sprint.timerStartedAt = 0;
-      payoutState.sprint.hasStarted = false;
-      payoutState.sprint.completed = false;
+      restartSprint();
+      return;
     }
 
     if (mode === 'random') {
@@ -1055,11 +1102,10 @@ function setPayoutMode(mode) {
       payoutState.random.inputValue = '';
       payoutState.random.currentStreak = 0;
       payoutState.random.currentBet = getRandomBet();
+      renderPayoutMode();
+      savePayoutState();
+      return;
     }
-
-    renderPayoutMode();
-    savePayoutState();
-    return;
   }
 
   if (payoutMode === 'sprint') {
@@ -1127,17 +1173,19 @@ function handleSprintAnswer() {
 
   if (Math.abs(val - correct) < 0.01) {
     sprint.progress += 1;
-    sprint.currentStreak += 1;
-    if (sprint.currentStreak > sprint.bestStreak) {
-      sprint.bestStreak = sprint.currentStreak;
-    }
-
     triggerSuccessEffect(payoutWidget, payoutInput);
 
     if (sprint.progress >= 50) {
       pauseSprintTimerProgress();
       sprint.completed = true;
-      sprint.feedback = `🏁 Finished in ${formatTime(sprint.elapsedMs)}`;
+      const finishedMs = Math.round(sprint.elapsedMs);
+      const isBest = !Number.isFinite(sprint.bestCompletedMs) || finishedMs < sprint.bestCompletedMs;
+      if (isBest) {
+        sprint.bestCompletedMs = finishedMs;
+      }
+      sprint.feedback = isBest
+        ? `🏁 Finished in ${formatTime(finishedMs)} • New best time!`
+        : `🏁 Finished in ${formatTime(finishedMs)}`;
       sprint.inputValue = '';
       renderPayoutMode();
       savePayoutState();
@@ -1150,11 +1198,22 @@ function handleSprintAnswer() {
     renderPayoutMode();
     savePayoutState();
   } else {
-    sprint.currentStreak = 0;
     renderPayoutMode();
     triggerPayoutError('Try again');
     sprint.feedback = 'Try again';
     savePayoutState();
+  }
+}
+
+function restartSprint() {
+  payoutMode = 'sprint';
+  resetSprintModeState(true);
+
+  renderPayoutMode();
+  savePayoutState();
+
+  if (isPayoutVisible()) {
+    setTimeout(() => focusWithoutScroll(payoutInput), 40);
   }
 }
 
@@ -1233,6 +1292,8 @@ function switchTab(mode) {
 }
 
 function updateTableScale() {
+  updateViewportMetrics();
+
   const shell = document.getElementById('table-shell');
   if (!shell) return;
 
@@ -1241,20 +1302,31 @@ function updateTableScale() {
   const designHeight = 720;
 
   const scale = Math.min(rect.width / designWidth, rect.height / designHeight);
-  const safeScale = Math.max(0.56, Math.min(1, scale));
+  const safeScale = Math.max(0.56, Math.min(0.97, scale));
 
   document.documentElement.style.setProperty('--table-scale', safeScale.toFixed(3));
 }
 
 window.addEventListener('resize', () => {
+  updateViewportMetrics();
   updateTableScale();
   updatePayoutFitScale();
 });
 
 window.addEventListener('orientationchange', () => {
+  updateViewportMetrics();
   updateTableScale();
   updatePayoutFitScale();
 });
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    updateViewportMetrics();
+    updateTableScale();
+    updatePayoutFitScale();
+  });
+  window.visualViewport.addEventListener('scroll', updatePayoutFitScale);
+}
 
 window.addEventListener('beforeunload', () => {
   pauseGame();
@@ -1288,13 +1360,13 @@ window.addEventListener('load', () => {
   if (!restoredGame) {
     buildDeck();
     renderTable();
-    saveGameState();
   }
 
   if (!restoredPayout) {
     initDefaultPayoutState();
   }
 
+  updateViewportMetrics();
   updateTableScale();
   updateCenterConsoleVisibility();
   updatePayoutFitScale();
