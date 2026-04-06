@@ -1125,6 +1125,15 @@ function isAutoSubmittableExact(rawValue, correct) {
   return Math.abs(parsed - correct) < 0.01;
 }
 
+function shouldAutoSubmitPayout() {
+  const supportsMatchMedia = typeof window.matchMedia === 'function';
+  const isPhoneLayout = payoutModeEl?.classList.contains('payout-phone');
+  const hasCoarsePointer = supportsMatchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  const hasNoHover = supportsMatchMedia ? window.matchMedia('(hover: none)').matches : false;
+
+  return Boolean(isPhoneLayout && hasCoarsePointer && hasNoHover);
+}
+
 function handleRandomAnswer() {
   if (payoutLocked || payoutMode !== 'random') return;
 
@@ -1224,10 +1233,15 @@ function maybeAutoSubmitPayout() {
     payoutState.random.inputValue = payoutInput.value;
   } else {
     payoutState.sprint.inputValue = payoutInput.value;
-    beginSprintTimerIfNeeded();
   }
 
   savePayoutState();
+
+  if (!shouldAutoSubmitPayout()) return;
+
+  if (payoutMode === 'sprint') {
+    beginSprintTimerIfNeeded();
+  }
 
   const raw = payoutInput.value.trim();
   const correct = getCurrentPayoutCorrectValue();
