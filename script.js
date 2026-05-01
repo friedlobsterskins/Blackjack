@@ -7,6 +7,14 @@ const STORAGE_KEYS = {
   game: 'blackjackTrainerGameState',
   payout: 'blackjackTrainerPayoutState'
 };
+const GAME_RULES = {
+  decks: 6,
+  dealerHitsSoft17: true,
+  dealerPeek: true,
+  doubleAfterSplit: true,
+  hitSplitAces: false,
+  maxHandsPerPlayer: 4
+};
 
 let deck = [];
 let players = [];
@@ -118,7 +126,7 @@ function loadAppState() {
 function buildDeck() {
   deck = [];
 
-  for (let d = 0; d < 6; d++) {
+  for (let d = 0; d < GAME_RULES.decks; d++) {
     for (const suit of suits) {
       for (const rank of ranks) {
         deck.push({ rank, suit });
@@ -159,7 +167,17 @@ function getBestTotal(hand) {
   return total;
 }
 
-function botAction(hand, dealerUpVal) {
+function createHand(cards = [], bet = 0, overrides = {}) {
+  return {
+    cards: [...cards],
+    bet,
+    isDouble: false,
+    isSplitAce: false,
+    ...overrides
+  };
+}
+
+function getHandProfile(hand) {
   const total = getBestTotal(hand);
   const hasAce = hand.some((card) => card.rank === 'A');
   const hardTotal = hand.reduce(
@@ -167,29 +185,151 @@ function botAction(hand, dealerUpVal) {
     0
   );
   const isSoft = hasAce && hardTotal + 10 <= 21;
+  const softTotal = isSoft ? hardTotal + 10 : null;
 
-  if (
-    hand.length === 2 &&
-    (total === 10 || total === 11) &&
-    dealerUpVal >= 2 &&
-    dealerUpVal <= 9
-  ) {
-    return 'DOUBLE';
+  return { total, hardTotal, isSoft, softTotal };
+}
+
+function isBlackjack(hand) {
+  return hand.length === 2 && getBestTotal(hand) === 21;
+}
+
+function getDealerUpValue(card) {
+  return card.rank === 'A' ? 11 : getVal(card.rank);
+}
+
+function getPairToken(hand) {
+  if (hand.length !== 2) return null;
+
+  const firstVal = getVal(hand[0].rank);
+  const secondVal = getVal(hand[1].rank);
+
+  if (firstVal !== secondVal) return null;
+  if (firstVal === 11) return 'A';
+  return String(firstVal);
+}
+
+function canSplitHand(handObj, player) {
+  return Boolean(
+    handObj &&
+    player &&
+    handObj.cards.length === 2 &&
+    getPairToken(handObj.cards) &&
+    !handObj.isSplitAce &&
+    player.hands.length < GAME_RULES.maxHandsPerPlayer
+  );
+}
+
+function getSplitDecision(pairToken, dealerUpVal) {
+  switch (pairToken) {
+    case 'A':
+    case '8':
+      return 'SPLIT';
+    case '9':
+      return [2, 3, 4, 5, 6, 8, 9].includes(dealerUpVal) ? 'SPLIT' : 'STAND';
+    case '7':
+      return dealerUpVal >= 2 && dealerUpVal <= 7 ? 'SPLIT' : 'HIT';
+    case '6':
+      return dealerUpVal >= 2 && dealerUpVal <= 6 ? 'SPLIT' : 'HIT';
+    case '5':
+      return null;
+    case '4':
+      return dealerUpVal === 5 || dealerUpVal === 6 ? 'SPLIT' : 'HIT';
+    case '3':
+    case '2':
+      return dealerUpVal >= 2 && dealerUpVal <= 7 ? 'SPLIT' : 'HIT';
+    case '10':
+      return 'STAND';
+    default:
+      return null;
+  }
+}
+
+function botAction(handObj, player, dealerUpVal) {
+  const hand = handObj.cards;
+  const { total, softTotal } = getHandProfile(hand);
+  const canDouble = hand.length === 2 && (!handObj.isSplitAce || GAME_RULES.hitSplitAces);
+  const canSplit = canSplitHand(handObj, player);
+  const pairToken = canSplit ? getPairToken(hand) : null;
+
+  if (pairToken) {
+    const splitDecision = getSplitDecision(pairToken, dealerUpVal);
+    if (splitDecision === 'SPLIT') return 'SPLIT';
+    if (splitDecision === 'STAND') return 'STAND';
   }
 
-  if (total <= 11) return 'HIT';
-  if (total >= 17 && !isSoft) return 'STAND';
-
-  if (isSoft) {
-    if (total <= 17) return 'HIT';
-    if (total === 18 && [9, 10, 11].includes(dealerUpVal)) return 'HIT';
-    return 'STAND';
+  if (softTotal !== null && total <= 21) {
+    switch (softTotal) {
+      case 13:
+      case 14:
+        return canDouble && dealerUpVal >= 5 && dealerUpVal <= 6 ? 'DOUBLE' : 'HIT';
+      case 15:
+      case 16:
+        return canDouble && dealerUpVal >= 4 && dealerUpVal <= 6 ? 'DOUBLE' : 'HIT';
+      case 17:
+        return canDouble && dealerUpVal >= 3 && dealerUpVal <= 6 ? 'DOUBLE' : 'HIT';
+      case 18:
+        if (canDouble && dealerUpVal >= 3 && dealerUpVal <= 6) return 'DOUBLE';
+        if ([2, 7, 8].includes(dealerUpVal)) return 'STAND';
+        return 'HIT';
+      default:
+        return 'STAND';
+    }
   }
 
-  if (total === 12 && dealerUpVal >= 4 && dealerUpVal <= 6) return 'STAND';
+  if (total <= 8) return 'HIT';
+
+  if (total === 9) {
+    return canDouble && dealerUpVal >= 3 && dealerUpVal <= 6 ? 'DOUBLE' : 'HIT';
+  }
+
+  if (total === 10) {
+    return canDouble && dealerUpVal >= 2 && dealerUpVal <= 9 ? 'DOUBLE' : 'HIT';
+  }
+
+  if (total === 11) {
+    return canDouble ? 'DOUBLE' : 'HIT';
+  }
+
+  if (total === 12) {
+    return dealerUpVal >= 4 && dealerUpVal <= 6 ? 'STAND' : 'HIT';
+  }
+
   if (total >= 13 && total <= 16 && dealerUpVal >= 2 && dealerUpVal <= 6) return 'STAND';
+  if (total >= 17) return 'STAND';
 
   return 'HIT';
+}
+
+function dealerHasPeekBlackjack() {
+  if (!GAME_RULES.dealerPeek || dealer.hand.length < 2) return false;
+
+  const upValue = getDealerUpValue(dealer.hand[0]);
+  return (upValue === 10 || upValue === 11) && isBlackjack(dealer.hand);
+}
+
+function splitHand(pIdx, hIdx) {
+  const player = players[pIdx];
+  const handObj = player?.hands[hIdx];
+
+  if (!canSplitHand(handObj, player)) return false;
+
+  const [firstCard, secondCard] = handObj.cards;
+  const pairToken = getPairToken(handObj.cards);
+  const splitBet = handObj.bet || player.bet;
+  const isSplitAce = pairToken === 'A';
+
+  const firstHand = createHand([firstCard], splitBet, { isSplitAce });
+  const secondHand = createHand([secondCard], splitBet, { isSplitAce });
+
+  player.hands.splice(hIdx, 1, firstHand, secondHand);
+  player.hands[hIdx].cards.push(deck.pop());
+  player.hands[hIdx + 1].cards.push(deck.pop());
+
+  renderTable(`player-${pIdx}-${hIdx + 1}-1`);
+  saveGameState();
+  scheduleGameAction({ type: 'playHand', pIdx, hIdx }, 260);
+  return true;
 }
 
 function getChipColor(amount) {
@@ -520,6 +660,14 @@ function dealInitialStep(step = 0) {
   if (!roundActive) return;
 
   if (step >= 8) {
+    if (dealerHasPeekBlackjack()) {
+      dealer.isRevealed = true;
+      renderTable();
+      saveGameState();
+      scheduleGameAction({ type: 'dealerBlackjackPrompt' }, 260);
+      return;
+    }
+
     scheduleGameAction({ type: 'playHand', pIdx: 0, hIdx: 0 }, 350);
     return;
   }
@@ -560,10 +708,13 @@ function startRound() {
 
   const bets = [10, 15, 25, 50, 100];
 
-  players = Array.from({ length: 3 }, () => ({
-    bet: bets[Math.floor(Math.random() * bets.length)],
-    hands: [{ cards: [], isDouble: false }]
-  }));
+  players = Array.from({ length: 3 }, () => {
+    const bet = bets[Math.floor(Math.random() * bets.length)];
+    return {
+      bet,
+      hands: [createHand([], bet)]
+    };
+  });
 
   dealer = { hand: [], isRevealed: false };
   gamePhase = { type: 'dealing', step: 0 };
@@ -588,8 +739,13 @@ function playHand(pIdx, hIdx) {
   const cards = handObj.cards;
   const total = getBestTotal(cards);
 
-  if (cards.length === 2 && total === 21) {
+  if (isBlackjack(cards) && !handObj.isSplitAce) {
     promptDealer(21, `SPOT ${pIdx + 1} BLACKJACK`, { type: 'nextHand', pIdx, hIdx });
+    return;
+  }
+
+  if (handObj.isSplitAce && !GAME_RULES.hitSplitAces && cards.length === 2) {
+    promptDealer(total, `SPOT ${pIdx + 1} TOTAL`, { type: 'nextHand', pIdx, hIdx });
     return;
   }
 
@@ -602,52 +758,31 @@ function resolveHandAction(pIdx, hIdx) {
   const handObj = players[pIdx]?.hands[hIdx];
   if (!handObj) return;
 
-  const cards = handObj.cards;
-  const total = getBestTotal(cards);
-  const upCardVal = getVal(dealer.hand[0].rank);
+  const player = players[pIdx];
+  const { total } = getHandProfile(handObj.cards);
+  const upCardVal = getDealerUpValue(dealer.hand[0]);
 
-  if (total >= 21 || handObj.isDouble) {
+  if (
+    total >= 21 ||
+    handObj.isDouble ||
+    (handObj.isSplitAce && !GAME_RULES.hitSplitAces && handObj.cards.length >= 2)
+  ) {
     nextHand(pIdx, hIdx);
     return;
   }
 
-  if (
-    cards.length === 2 &&
-    cards[0].rank === cards[1].rank &&
-    ['8', 'A'].includes(cards[0].rank)
-  ) {
-    const isAces = cards[0].rank === 'A';
+  const action = botAction(handObj, player, upCardVal);
 
-    players[pIdx].hands = [
-      { cards: [cards[0]], isDouble: false },
-      { cards: [cards[1]], isDouble: false }
-    ];
-
-    if (isAces) {
-      players[pIdx].hands[0].cards.push(deck.pop());
-      players[pIdx].hands[1].cards.push(deck.pop());
-      activeHandIdx = 0;
-      renderTable(`player-${pIdx}-1-1`);
-      saveGameState();
-      scheduleGameAction({ type: 'splitAcePromptFirst', pIdx }, 240);
-      return;
-    }
-
-    players[pIdx].hands[0].cards.push(deck.pop());
-    renderTable(`player-${pIdx}-0-1`);
-    saveGameState();
-    scheduleGameAction({ type: 'playHand', pIdx, hIdx: 0 }, 240);
-    return;
+  if (action === 'SPLIT') {
+    if (splitHand(pIdx, hIdx)) return;
   }
 
-  const action = botAction(cards, upCardVal);
-
-  if (action === 'DOUBLE') {
-    players[pIdx].bet *= 2;
+  if (action === 'DOUBLE' && handObj.cards.length === 2) {
+    handObj.bet *= 2;
     handObj.isDouble = true;
     handObj.cards.push(deck.pop());
 
-    renderTable(`player-${pIdx}-${hIdx}-2`);
+    renderTable(`player-${pIdx}-${hIdx}-${handObj.cards.length - 1}`);
     saveGameState();
     scheduleGameAction({ type: 'afterDouble', pIdx, hIdx }, 280);
     return;
@@ -688,16 +823,17 @@ function playDealerStart() {
 function dealerStep() {
   if (!roundActive) return;
 
-  const total = getBestTotal(dealer.hand);
+  const { total } = getHandProfile(dealer.hand);
   promptDealer(total, 'DEALER TOTAL', { type: 'resolveDealerAction' });
 }
 
 function resolveDealerAction() {
   if (!roundActive) return;
 
-  const total = getBestTotal(dealer.hand);
+  const dealerProfile = getHandProfile(dealer.hand);
+  const { total, isSoft } = dealerProfile;
 
-  if (total < 17) {
+  if (total < 17 || (GAME_RULES.dealerHitsSoft17 && total === 17 && isSoft)) {
     const hitIdx = dealer.hand.length;
     dealer.hand.push(deck.pop());
 
@@ -746,21 +882,11 @@ function dispatchGameAction(action) {
     case 'nextHand':
       nextHand(action.pIdx, action.hIdx);
       break;
-    case 'splitAcePromptFirst':
-      promptDealer(
-        getBestTotal(players[action.pIdx].hands[0].cards),
-        'SPLIT ACE 1',
-        { type: 'splitAcePromptSecond', pIdx: action.pIdx }
-      );
+    case 'dealerBlackjackPrompt':
+      promptDealer(21, 'DEALER BLACKJACK', { type: 'finishDealerBlackjack' });
       break;
-    case 'splitAcePromptSecond':
-      activeHandIdx = 1;
-      renderTable();
-      promptDealer(
-        getBestTotal(players[action.pIdx].hands[1].cards),
-        'SPLIT ACE 2',
-        { type: 'nextHand', pIdx: action.pIdx, hIdx: 1 }
-      );
+    case 'finishDealerBlackjack':
+      finishRound('Dealer blackjack');
       break;
     case 'afterDouble':
       promptDealer(
@@ -828,10 +954,18 @@ function resumeGame() {
   }
 }
 
-hudInput.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter' || !roundActive) return;
+function shouldAutoSubmitGameInput() {
+  return activeTab === 'game';
+}
 
-  const val = parseInt(hudInput.value, 10);
+function handleHudAnswerSubmission() {
+  if (!roundActive) return;
+
+  const raw = hudInput.value.trim();
+  if (!raw) return;
+
+  const val = parseInt(raw, 10);
+  if (!Number.isFinite(val)) return;
 
   if (val === currentExpectedTotal) {
     triggerSuccessEffect(hud, hudInput);
@@ -846,7 +980,28 @@ hudInput.addEventListener('keydown', (e) => {
     hudInput.classList.add('error-shake');
     hudInput.value = '';
   }
+}
+
+hudInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !roundActive) return;
+
+  handleHudAnswerSubmission();
 });
+
+hudInput.addEventListener('input', () => {
+  if (!shouldAutoSubmitGameInput()) return;
+
+  const raw = hudInput.value.trim();
+  if (!raw) return;
+
+  const val = parseInt(raw, 10);
+  if (!Number.isFinite(val) || val !== currentExpectedTotal) return;
+
+  handleHudAnswerSubmission();
+});
+
+hudInput.addEventListener('focus', scheduleResponsiveLayout);
+hudInput.addEventListener('blur', scheduleResponsiveLayout);
 
 function cancelPayoutAdvanceTimer() {
   if (payoutAdvanceTimer) {
