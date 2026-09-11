@@ -34,8 +34,8 @@
           !['insurance','player','preflop','flop','river','settled'].includes(saved.round.phase))) return fresh();
       if (saved.round?.game === 'blackjack') saved.shoe = saved.round.shoe;
       saved.history = saved.history.slice(0, 50);
-      saved.bets.blackjack = validStoredBet(saved.bets.blackjack, 500);
-      saved.bets.ultimate = validStoredBet(saved.bets.ultimate, 200);
+      saved.bets.blackjack = validStoredBet(saved.bets.blackjack, 2000);
+      saved.bets.ultimate = validStoredBet(saved.bets.ultimate, 2000);
       saved.bets.trips = Number.isInteger(saved.bets.trips) && saved.bets.trips >= 0 && saved.bets.trips <= 100 && saved.bets.trips % 5 === 0 ? saved.bets.trips : 0;
       return saved;
     } catch { return fresh(); }
@@ -89,7 +89,7 @@
   const active = () => Boolean(state.round && state.round.phase !== 'settled');
   const locked = () => busy || active();
   const ultimate = () => state.game === 'ultimate';
-  const maxBet = () => ultimate() ? 200 : 500;
+  const maxBet = () => 2000;
   const bet = () => Number($('bet-input').value);
   const trips = () => ultimate() ? Number($('trips-input').value) : 0;
 
@@ -97,7 +97,7 @@
     const amount = bet();
     const side = trips();
     if (amount === 0) return ultimate() ? 'Select a chip, then click Ante or Blind to place your opening bets.' : 'Select a chip, then click the betting circle to place your bet.';
-    if (!Number.isInteger(amount) || amount < 5 || amount > maxBet() || amount % 5 !== 0) return 'Choose a bet from $5 to ' + compact(maxBet()) + ', in $5 increments.';
+    if (!Number.isInteger(amount) || amount < 25 || amount > maxBet() || amount % 5 !== 0) return 'Choose a bet from $25 to ' + compact(maxBet()) + ', in $5 increments.';
     if (!Number.isInteger(side) || side < 0 || side > 100 || side % 5 !== 0) return 'Trips must be $0–$100 in $5 increments.';
     const required = ultimate() ? amount * 3 + side : amount;
     if (state.balance < required) return ultimate() ? 'You need Ante + Blind + at least 1× Ante for Play. Lower your bet or add free chips.' : 'Not enough chips. Lower your bet or add free chips.';
@@ -114,7 +114,7 @@
     const amount = Number.isFinite(bet()) ? bet() : 0;
     $('bet-input').max = maxBet();
     $('bet-label').textContent = ultimate() ? 'YOUR ANTE' : 'YOUR BET';
-    $('bet-range').textContent = '$5 – ' + compact(maxBet());
+    $('bet-range').textContent = '$25 – ' + compact(maxBet());
     $('poker-bets').hidden = !ultimate();
     $('blind-bet').textContent = compact(amount);
     $('wager-label').textContent = state.round ? finalVisible() ? 'LAST WAGER' : 'ON THE TABLE' : 'ON THE TABLE';
@@ -156,6 +156,9 @@
 
   function cardHTML(card, options = {}) {
     const classes = ['card'];
+    const fanPosition = options.fanIndex === undefined ? 0 : options.fanIndex - (options.fanCount - 1)/2;
+    const fanAngle = fanPosition * Math.min(18, 38 / Math.max(1, (options.fanCount || 1)-1));
+    const fanStyle = options.fanIndex === undefined ? '' : ' style="--fan-angle:' + fanAngle + 'deg;--fan-y:' + (-fanPosition*10) + 'px"';
     if (options.animate) classes.push('dealt');
     if (!card) return '<div class="card card-placeholder" aria-label="Empty card position"><span aria-hidden="true">♠</span></div>';
     if (options.hidden) return '<div class="' + classes.join(' ') + ' card-back" role="img" aria-label="Face-down card"></div>';
@@ -163,7 +166,7 @@
     if (['J','Q','K'].includes(card.rank)) classes.push('face-card');
     if (options.best) classes.push('best-card');
     const corner = '<span>' + escape(card.rank) + '</span><small>' + SUITS[card.suit] + '</small>';
-    return '<div class="' + classes.join(' ') + '" role="img" aria-label="' + escape(card.rank + ' of ' + SUIT_NAMES[card.suit]) + '"><div class="card-corner" aria-hidden="true">' + corner + '</div><div class="card-center" aria-hidden="true">' + (['J','Q','K'].includes(card.rank) ? escape(card.rank) : SUITS[card.suit]) + '</div><div class="card-corner bottom" aria-hidden="true">' + corner + '</div></div>';
+    return '<div class="' + classes.join(' ') + '"' + fanStyle + ' role="img" aria-label="' + escape(card.rank + ' of ' + SUIT_NAMES[card.suit]) + '"><div class="card-corner" aria-hidden="true">' + corner + '</div><div class="card-center" aria-hidden="true">' + (['J','Q','K'].includes(card.rank) ? ({J:'♞',Q:'♛',K:'♚'}[card.rank]) : SUITS[card.suit]) + '</div><div class="card-corner bottom" aria-hidden="true">' + corner + '</div></div>';
   }
 
   function finalVisible() { return state.round?.phase === 'settled' && !busy; }
@@ -188,8 +191,8 @@
     $('table').className = 'table ' + (ultimate() ? 'ultimate-table' : 'blackjack-table');
     $('table-name').textContent = ultimate() ? 'ULTIMATE TEXAS HOLD’EM' : 'BLACKJACK';
     $('table-number').textContent = ultimate() ? 'TABLE 02' : 'TABLE 01';
-    $('felt-brand').querySelector('.felt-brand-name').textContent = ultimate() ? 'ULTIMATE TEXAS HOLD’EM' : 'BLACKJACK';
-    $('felt-limit').innerHTML = 'MIN $5 <span>·</span> MAX ' + compact(maxBet()) + (ultimate() ? ' ANTE' : '');
+    $('felt-brand').querySelector('.felt-brand-name').textContent = ultimate() ? 'Ultimate Texas Hold’em' : 'Blackjack';
+    $('felt-limit').innerHTML = 'MIN $25 <span>·</span> MAX ' + compact(maxBet()) + (ultimate() ? ' ANTE' : '');
     $('community-zone').hidden = !ultimate();
     document.querySelectorAll('[data-game]').forEach(el => {
       el.classList.toggle('active', el.dataset.game === state.game);
@@ -204,7 +207,7 @@
     const shownDealer = !ultimate() ? visibleDealer.filter((_,i) => reveal || i === 0) : [];
     $('dealer-total').hidden = !shownDealer.length || ultimate();
     $('dealer-total').textContent = shownDealer.length ? totalText(shownDealer) : '';
-    $('dealer-caption').textContent = !r ? 'Your seat is ready' : ultimate() ? (settled ? r.dealerRank.name + (r.qualifies ? ' · Dealer qualifies' : ' · Dealer does not qualify') : 'Dealer needs a pair to qualify') : settled ? (E.isBlackjack(r.dealer) ? 'Blackjack' : E.blackjackValue(r.dealer).total > 21 ? 'Dealer busts' : 'Dealer total: ' + totalText(r.dealer)) : reveal ? 'Dealer is playing' : 'Dealer hits soft 17';
+    $('dealer-caption').textContent = !r ? 'Your next hand is waiting' : ultimate() ? (settled ? r.dealerRank.name + (r.qualifies ? ' · Dealer qualifies' : ' · Dealer does not qualify') : 'Dealer needs a pair to qualify') : settled ? (E.isBlackjack(r.dealer) ? 'Blackjack' : E.blackjackValue(r.dealer).total > 21 ? 'Dealer busts' : 'Dealer total: ' + totalText(r.dealer)) : reveal ? 'Dealer is playing' : 'Dealer hits soft 17';
 
     if (ultimate()) {
       const count = visibleBoardCount();
@@ -216,8 +219,8 @@
       const label = rank || (r ? 'YOUR HOLE CARDS' : 'YOUR HAND');
       const wagers = r ? [['ANTE',r.ante],['BLIND',r.blind],['PLAY',r.play], ...(r.trips ? [['TRIPS',r.trips]] : [])] : [['ANTE',bet()],['BLIND',bet()]];
       $('player-hands').className = 'player-hands';
-      $('player-hands').innerHTML = '<div class="player-hand ' + (settled ? r.result === 'win' ? 'won' : r.result === 'lose' ? 'lost' : '' : r ? 'active' : '') + '"><div class="hand-title">' + escape(label) + '</div><div class="hand">' + (r ? cards.map((c,i) => cardHTML(c,{best:bestCard(c),animate:view?.newCard === 'p0-' + i})).join('') : cardHTML(null) + cardHTML(null)) + '</div><div class="poker-wagers">' + wagers.map(([name,value]) => '<div class="poker-wager"><small>' + name + '</small>' + compact(value) + '</div>').join('') + '</div></div>';
-      $('player-caption').textContent = settled ? r.result === 'fold' ? 'Folded · Trips settled independently' : 'Best five of seven' : r ? 'Play against the dealer' : 'Take a seat. Make your play.';
+      $('player-hands').innerHTML = '<div class="player-hand ' + (settled ? r.result === 'win' ? 'won' : r.result === 'lose' ? 'lost' : '' : r ? 'active' : '') + '"><div class="hand-title">' + escape(label) + '</div><div class="hand">' + (r ? cards.map((c,i) => cardHTML(c,{best:bestCard(c),animate:view?.newCard === 'p0-' + i,fanIndex:i,fanCount:cards.length})).join('') : cardHTML(null) + cardHTML(null)) + '</div><div class="poker-wagers">' + wagers.map(([name,value]) => '<div class="poker-wager"><small>' + name + '</small>' + compact(value) + '</div>').join('') + '</div></div>';
+      $('player-caption').textContent = settled ? r.result === 'fold' ? 'Folded · Trips settled independently' : 'Best five of seven' : r ? 'Play against the dealer' : 'Make yourself at home.';
       $('shoe-info').textContent = 'Single deck · Fresh shuffle every hand';
     } else {
       const hands = r?.hands || [];
@@ -226,9 +229,9 @@
         const cards = playerCards(i,hand.cards);
         const focused = !busy && r.phase === 'player' && i === r.activeHand;
         const result = settled ? ({ blackjack:'BLACKJACK', win:'WIN', lose:'LOSE', push:'PUSH', bust:'BUST' }[hand.result]) : hand.done && !busy ? (E.blackjackValue(hand.cards).total > 21 ? 'BUST' : 'STAND') : hands.length > 1 ? 'HAND ' + (i + 1) : 'YOUR HAND';
-        return '<div class="player-hand ' + (focused ? 'active ' : '') + (settled ? hand.returned > hand.bet ? 'won' : hand.returned < hand.bet ? 'lost' : '' : '') + '"><div class="hand-title">' + result + (cards.length ? '<span class="total-badge">' + totalText(cards) + '</span>' : '') + '</div><div class="hand ' + (cards.length > 4 ? 'many-cards' : '') + '">' + cards.map((c,j) => cardHTML(c,{animate:view?.newCard === 'p' + i + '-' + j})).join('') + '</div><div class="bet-on-table">' + compact(hand.bet) + '</div></div>';
+        return '<div class="player-hand ' + (focused ? 'active ' : '') + (settled ? hand.returned > hand.bet ? 'won' : hand.returned < hand.bet ? 'lost' : '' : '') + '"><div class="hand-title">' + result + (cards.length ? '<span class="total-badge">' + totalText(cards) + '</span>' : '') + '</div><div class="hand ' + (cards.length > 4 ? 'many-cards' : '') + '">' + cards.map((c,j) => cardHTML(c,{animate:view?.newCard === 'p' + i + '-' + j,fanIndex:j,fanCount:cards.length})).join('') + '</div><div class="bet-on-table">' + compact(hand.bet) + '</div></div>';
       }).join('') : '<div class="player-hand"><div class="hand-title">YOUR HAND</div><div class="hand">' + cardHTML(null) + cardHTML(null) + '</div><div class="bet-on-table">' + compact(bet() || 0) + '</div></div>';
-      $('player-caption').textContent = !r ? 'Take a seat. Make your play.' : r.hands.length > 1 && !settled ? 'Playing hand ' + (r.activeHand + 1) + ' of ' + r.hands.length : r.insurance.bet ? 'Insurance: ' + compact(r.insurance.bet) + (r.insurance.result ? ' · ' + (r.insurance.result === 'win' ? 'Won' : 'Lost') : '') : settled ? 'Your next hand is waiting' : 'The next move is yours';
+      $('player-caption').textContent = !r ? 'Make yourself at home.' : r.hands.length > 1 && !settled ? 'Playing hand ' + (r.activeHand + 1) + ' of ' + r.hands.length : r.insurance.bet ? 'Insurance: ' + compact(r.insurance.bet) + (r.insurance.result ? ' · ' + (r.insurance.result === 'win' ? 'Won' : 'Lost') : '') : settled ? 'Your next hand is waiting' : 'The next move is yours';
       const remaining = r?.shoe?.length ?? state.shoe.length;
       $('shoe-info').textContent = remaining ? '6-deck shoe · ' + remaining + ' cards remaining' : '6-deck shoe · Shuffled and ready';
     }
@@ -240,7 +243,7 @@
 
   function renderActions() {
     const r = state.round;
-    let title = 'Good evening. Let’s play.';
+    let title = state.hands ? 'Welcome back to your seat.' : 'Pull up a chair. You’re in good company.';
     let detail = ultimate() ? 'Place equal Ante and Blind bets to begin.' : 'Choose your chips and place your bet.';
     let actions = '';
     let resultClass = '';
@@ -250,7 +253,7 @@
     } else if (!r || r.phase === 'settled') {
       if (r) {
         const net = cents(r.returned - r.wagered);
-        title = net > 0 ? 'You win ' + cash(net) + '.' : net < 0 ? 'You lost ' + cash(-net) + '.' : 'A push. Your chips are back.';
+        title = net > 0 ? 'Nicely played. ' + cash(net) + ' is yours.' : net < 0 ? 'The house takes this one. −' + cash(-net) + '.' : 'Even honours. Your chips are back.';
         if (r.game === 'blackjack' && r.hands.length === 1 && r.hands[0].result === 'blackjack') title = 'Blackjack. ' + signed(net) + '.';
         if (r.game === 'ultimate' && r.result === 'fold') title = 'You folded. ' + signed(net) + '.';
         resultClass = net > 0 ? 'won' : net < 0 ? 'lost' : '';
@@ -272,15 +275,15 @@
     } else {
       const legal = E.ultimateActions(r,state.balance);
       if (r.phase === 'preflop') {
-        title = 'Your cards are in. Make your play.';
+        title = 'Two cards. A little possibility.';
         detail = 'Raise 3× or 4× your ante, or check to see the flop.';
         actions = button('check','Check') + button('play3','Play 3×',legal.includes('play3'),'',compact(r.ante*3)) + button('play4','Play 4×',legal.includes('play4'),'primary',compact(r.ante*4));
       } else if (r.phase === 'flop') {
-        title = 'The flop. Raise or check?';
+        title = 'There’s the flop. What do you think?';
         detail = 'Bet 2× your ante, or check to the turn and river.';
         actions = button('check','Check') + button('play2','Play 2×',legal.includes('play2'),'primary',compact(r.ante*2));
       } else {
-        title = 'The river. Your final decision.';
+        title = 'All the cards are out. Your call.';
         detail = 'Bet 1× your ante to face the dealer, or fold.';
         actions = button('fold','Fold',true,'danger') + button('play1','Play 1×',legal.includes('play1'),'primary',compact(r.ante));
       }
@@ -604,15 +607,15 @@
     state.game = game;
     state.round = null;
     undoBets = [];
-    if (game === 'ultimate' && selectedChip > 100) selectedChip = 25;
+    // All main tables accept chips up to the $2,000 opening limit.
     view = null;
     syncInputs();
     save();
     render();
   }
 
-  const blackjackRules = '<p class="rules-intro">Beat the dealer’s total without going over 21. You play every hand, and the dealer follows the posted table rules.</p><h3>This table</h3><ul><li>Six decks. Dealer hits soft 17 and stands on hard 17 or higher. The shoe is shuffled between rounds when fewer than 80 cards remain.</li><li>A natural blackjack (an ace and a ten-value card) pays <b>3:2</b>. Other wins pay <b>1:1</b>. Equal totals push and return your bet. Busts lose even if the dealer later busts.</li><li>Double on any first two cards, including after a split. Add an equal bet and receive exactly one more card.</li><li>Split two cards of equal value into two hands. Up to four hands are allowed. Each new hand requires an equal bet.</li><li>Split aces receive one card each, cannot be hit or resplit, and a 21 after any split pays 1:1.</li><li>The dealer checks for blackjack with an ace or ten-value upcard. With an ace showing, insurance is offered first for half your original bet and pays 2:1 if the dealer has blackjack.</li><li>No surrender. Bets $5–$500 in $5 increments; extra split, double, and insurance wagers may exceed the opening limit.</li></ul><p class="dialog-note">Casino rules vary. These are this table’s fixed rules. Reference: <a href="https://clearwatercasino.com/wp-content/rules/SixDeckBlackjackRules.pdf" target="_blank" rel="noopener noreferrer">Clearwater six-deck blackjack</a>. Keyboard: H hit, S stand, D double, P split, Enter deal when no hand is active.</p>';
-  const pokerRules = '<p class="rules-intro">Ultimate Texas Hold’em is played against the dealer. Make the best five-card poker hand using any of your two hole cards and the five community cards.</p><h3>Make your play</h3><ol><li>Place equal <b>Ante</b> and <b>Blind</b> bets. Add an optional Trips bet before dealing.</li><li>With your two cards: check or bet <b>3× / 4× Ante</b> on Play.</li><li>After the three-card flop, if you checked: check again or bet <b>2× Ante</b>.</li><li>After the turn and river, if you still haven’t bet: <b>Play 1× Ante or fold</b>. You make only one Play bet per hand.</li></ol><h3>Showdown</h3><p>The dealer needs a pair or better to qualify. If the dealer doesn’t qualify, Ante pushes, including when your hand loses. Play and Blind still receive action. Otherwise a winning Ante pays 1:1. Winning Play pays 1:1. A tie returns all three main bets. Suits never break a tie. Folding loses Ante and Blind.</p><h3>Blind & Trips payouts</h3><table class="rules-table"><thead><tr><th>Best hand</th><th>Blind</th><th>Trips</th></tr></thead><tbody><tr><td>Royal flush</td><td>500:1</td><td>50:1</td></tr><tr><td>Straight flush</td><td>50:1</td><td>40:1</td></tr><tr><td>Four of a kind</td><td>10:1</td><td>30:1</td></tr><tr><td>Full house</td><td>3:1</td><td>8:1</td></tr><tr><td>Flush</td><td>3:2</td><td>7:1</td></tr><tr><td>Straight</td><td>1:1</td><td>4:1</td></tr><tr><td>Three of a kind</td><td>Push</td><td>3:1</td></tr><tr><td>Two pair or lower</td><td>Push</td><td>Lose</td></tr></tbody></table><p>Blind pays or pushes as shown <b>only when you beat the dealer</b>; it loses when you lose and pushes on a tie. Trips pays for three of a kind or better regardless of whether you win, lose, tie, or fold. All odds are profit; your winning stake is also returned.</p><p class="dialog-note">Ante and Blind: $5–$200 each. Optional Trips: $0–$100. Bets in $5 increments. Keep at least 1× Ante available for the final Play; keep 4× available to use every Play option. “Max” preserves 4× Ante. Fresh 52-card deck every hand. References: <a href="https://www.sycuan.com/wp-content/uploads/2024/09/Sycuan-Casino-Resort-Guide-To-Ultimate-Texas-Hold-Em.pdf" target="_blank" rel="noopener noreferrer">Sycuan rules and pay table</a> · <a href="https://oag.ca.gov/sites/all/files/agweb/pdfs/gambling/101-casino-utlimate-texas-hold-em-rules.pdf" target="_blank" rel="noopener noreferrer">California published game rules</a>.</p>';
+  const blackjackRules = '<p class="rules-intro">Beat the dealer’s total without going over 21. You play every hand, and the dealer follows the posted table rules.</p><h3>This table</h3><ul><li>Six decks. Dealer hits soft 17 and stands on hard 17 or higher. The shoe is shuffled between rounds when fewer than 80 cards remain.</li><li>A natural blackjack (an ace and a ten-value card) pays <b>3:2</b>. Other wins pay <b>1:1</b>. Equal totals push and return your bet. Busts lose even if the dealer later busts.</li><li>Double on any first two cards, including after a split. Add an equal bet and receive exactly one more card.</li><li>Split two cards of equal value into two hands. Up to four hands are allowed. Each new hand requires an equal bet.</li><li>Split aces receive one card each, cannot be hit or resplit, and a 21 after any split pays 1:1.</li><li>The dealer checks for blackjack with an ace or ten-value upcard. With an ace showing, insurance is offered first for half your original bet and pays 2:1 if the dealer has blackjack.</li><li>No surrender. Bets $25–$2,000 in $5 increments; extra split, double, and insurance wagers may exceed the opening limit.</li></ul><p class="dialog-note">Casino rules vary. These are this table’s fixed rules. Reference: <a href="https://clearwatercasino.com/wp-content/rules/SixDeckBlackjackRules.pdf" target="_blank" rel="noopener noreferrer">Clearwater six-deck blackjack</a>. Keyboard: H hit, S stand, D double, P split, Enter deal when no hand is active.</p>';
+  const pokerRules = '<p class="rules-intro">Ultimate Texas Hold’em is played against the dealer. Make the best five-card poker hand using any of your two hole cards and the five community cards.</p><h3>Make your play</h3><ol><li>Place equal <b>Ante</b> and <b>Blind</b> bets. Add an optional Trips bet before dealing.</li><li>With your two cards: check or bet <b>3× / 4× Ante</b> on Play.</li><li>After the three-card flop, if you checked: check again or bet <b>2× Ante</b>.</li><li>After the turn and river, if you still haven’t bet: <b>Play 1× Ante or fold</b>. You make only one Play bet per hand.</li></ol><h3>Showdown</h3><p>The dealer needs a pair or better to qualify. If the dealer doesn’t qualify, Ante pushes, including when your hand loses. Play and Blind still receive action. Otherwise a winning Ante pays 1:1. Winning Play pays 1:1. A tie returns all three main bets. Suits never break a tie. Folding loses Ante and Blind.</p><h3>Blind & Trips payouts</h3><table class="rules-table"><thead><tr><th>Best hand</th><th>Blind</th><th>Trips</th></tr></thead><tbody><tr><td>Royal flush</td><td>500:1</td><td>50:1</td></tr><tr><td>Straight flush</td><td>50:1</td><td>40:1</td></tr><tr><td>Four of a kind</td><td>10:1</td><td>30:1</td></tr><tr><td>Full house</td><td>3:1</td><td>8:1</td></tr><tr><td>Flush</td><td>3:2</td><td>7:1</td></tr><tr><td>Straight</td><td>1:1</td><td>4:1</td></tr><tr><td>Three of a kind</td><td>Push</td><td>3:1</td></tr><tr><td>Two pair or lower</td><td>Push</td><td>Lose</td></tr></tbody></table><p>Blind pays or pushes as shown <b>only when you beat the dealer</b>; it loses when you lose and pushes on a tie. Trips pays for three of a kind or better regardless of whether you win, lose, tie, or fold. All odds are profit; your winning stake is also returned.</p><p class="dialog-note">Ante and Blind: $25–$2,000 each. Optional Trips: $0–$100. Bets in $5 increments. Keep at least 1× Ante available for the final Play; keep 4× available to use every Play option. “Max” preserves 4× Ante. Fresh 52-card deck every hand. References: <a href="https://www.sycuan.com/wp-content/uploads/2024/09/Sycuan-Casino-Resort-Guide-To-Ultimate-Texas-Hold-Em.pdf" target="_blank" rel="noopener noreferrer">Sycuan rules and pay table</a> · <a href="https://oag.ca.gov/sites/all/files/agweb/pdfs/gambling/101-casino-utlimate-texas-hold-em-rules.pdf" target="_blank" rel="noopener noreferrer">California published game rules</a>.</p>';
 
   function showDialog(type) {
     let title = '';
