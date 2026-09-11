@@ -20,6 +20,9 @@
   let audioContext;
   let toastTimer;
   let storageWarned = false;
+  let selectedChip = 25;
+  let undoBets = [];
+  let lastChipZone = '';
 
   function load() {
     try {
@@ -39,7 +42,7 @@
   }
 
   function validStoredBet(value, max) {
-    return Number.isInteger(value) && value >= 5 && value <= max && value % 5 === 0 ? value : 25;
+    return Number.isInteger(value) && value >= 0 && value <= max && value % 5 === 0 ? value : 25;
   }
 
   function save() {
@@ -93,6 +96,7 @@
   function betError() {
     const amount = bet();
     const side = trips();
+    if (amount === 0) return ultimate() ? 'Select a chip, then click Ante or Blind to place your opening bets.' : 'Select a chip, then click the betting circle to place your bet.';
     if (!Number.isInteger(amount) || amount < 5 || amount > maxBet() || amount % 5 !== 0) return 'Choose a bet from $5 to ' + compact(maxBet()) + ', in $5 increments.';
     if (!Number.isInteger(side) || side < 0 || side > 100 || side % 5 !== 0) return 'Trips must be $0–$100 in $5 increments.';
     const required = ultimate() ? amount * 3 + side : amount;
@@ -113,12 +117,14 @@
     $('bet-range').textContent = '$5 – ' + compact(maxBet());
     $('poker-bets').hidden = !ultimate();
     $('blind-bet').textContent = compact(amount);
-    $('wager-label').textContent = active() || busy ? 'Chips on the table' : 'Total opening wager';
-    $('wager-total').textContent = cash(active() || busy ? state.round?.wagered || 0 : ultimate() ? amount * 2 + trips() : amount);
+    $('wager-label').textContent = state.round ? finalVisible() ? 'LAST WAGER' : 'ON THE TABLE' : 'ON THE TABLE';
+    $('wager-total').textContent = cash(state.round ? state.round.wagered : ultimate() ? amount * 2 + trips() : amount);
     $('betting-title').textContent = isLocked ? 'You’re at the table' : 'Place your bet';
-    $('betting-step').textContent = isLocked ? '02 / 02' : '01 / 02';
     document.querySelectorAll('[data-chip], [data-adjust], #bet-input, #trips-input').forEach(el => { el.disabled = isLocked; });
+    document.querySelectorAll('[data-action="clear"], [data-action="repeat"], [data-action="bet"]').forEach(el => { el.disabled = isLocked; });
+    document.querySelectorAll('[data-action="undo"]').forEach(el => { el.disabled = isLocked || !undoBets.length; });
     $('deal-btn').disabled = isLocked || Boolean(betError());
+    $('deal-btn').hidden = isLocked;
     $('deal-btn').innerHTML = '<span>' + (busy ? 'Dealing…' : active() ? 'Hand in progress' : state.round ? 'Deal again' : 'Deal me in') + '</span><span aria-hidden="true">→</span>';
     $('bet-error').textContent = isLocked ? '' : betError();
     document.querySelectorAll('[data-game]').forEach(el => {
@@ -138,7 +144,9 @@
     else if (action === 'half') value = Math.floor(value / 10) * 5;
     else if (action === 'twice') value *= 2;
     else if (action === 'max') value = Math.min(maxBet(), available);
-    value = Math.max(5, Math.min(maxBet(), value));
+    value = Math.max(0, Math.min(maxBet(), value));
+    rememberBet();
+    state.round = null;
     $('bet-input').value = value;
     state.bets[state.game] = value;
     save();
@@ -250,8 +258,7 @@
         if (ultimate() && !r.qualifies && r.result !== 'fold') detail += ' · Ante pushes';
         actions += button('details','Details');
       }
-      actions += button('deal',r ? 'Deal again' : 'Deal ' + compact((ultimate() ? bet()*2+trips() : bet()) || 0),!betError(),'primary');
-      if (!r) actions += button('bet','Edit bet');
+      if (!r) detail = ultimate() ? 'Select a chip. Click Ante or Blind to bet; Trips is optional.' : 'Select a chip, then click the betting circle to add it.';
     } else if (r.phase === 'insurance') {
       title = 'Dealer shows an ace. Insurance?';
       detail = 'A side bet of ' + cash(r.initialBet/2) + ' pays 2:1 if the dealer has blackjack.';
@@ -301,7 +308,7 @@
     $('session-net').textContent = signed(visibleNet);
     $('session-net').className = visibleNet > 0 ? 'positive' : visibleNet < 0 ? 'negative' : '';
     $('session-hands').textContent = (state.hands - (pending ? 1 : 0)).toLocaleString();
-    $('recent-hands').innerHTML = records.length ? historyHTML(records.slice(0,3)) : '<div class="history-empty"><span aria-hidden="true">♧</span><p>A fresh deck. A fresh start.<small>Your hands will appear here.</small></p></div>';
+    if ($('recent-hands')) $('recent-hands').innerHTML = records.length ? historyHTML(records.slice(0,3)) : '<div class="history-empty"><span aria-hidden="true">♧</span><p>A fresh deck. A fresh start.<small>Your hands will appear here.</small></p></div>';
     $('sound-btn').setAttribute('aria-pressed',String(Boolean(state.sound)));
     $('sound-btn').setAttribute('aria-label',state.sound ? 'Turn sound off' : 'Turn sound on');
     $('sound-btn').title = state.sound ? 'Turn sound off' : 'Turn sound on';
@@ -310,6 +317,8 @@
     updateBetting();
     renderTable();
     renderActions();
+    renderWagers();
+    renderChipSelection();
   }
 
   // Debit, settlement, history and round state are saved together before visual
@@ -374,6 +383,9 @@
     try {
       state.bets[state.game] = bet();
       state.bets.trips = Number($('trips-input').value) || 0;
+      state.lastBets ||= {};
+      state.lastBets[state.game] = { bet: bet(), trips: trips() };
+      undoBets = [];
       if (ultimate()) {
         state.round = E.createUltimate(bet(),trips());
       } else {
@@ -386,7 +398,6 @@
       save();
       view = { playerCounts:[0], dealerCount:0, dealerReveal:false, boardCount:0, message:'Dealing your cards…', newCard:'' };
       render();
-      if (window.innerWidth <= 700) $('table').scrollIntoView({behavior:reducedMotion.matches ? 'instant' : 'smooth',block:'start'});
       for (const [who,count] of [['p',1],['d',1],['p',2],['d',2]]) {
         await delay(190);
         if (who === 'p') view.playerCounts[0] = count;
@@ -438,7 +449,153 @@
   }
 
   function focusActions() {
-    if (!$('info-dialog').open) $('game-actions').querySelector('.primary:not(:disabled),button:not(:disabled)')?.focus({preventScroll:true});
+    if (!$('info-dialog').open && !$('bet-dialog').open) {
+      const target = $('game-actions').querySelector('.primary:not(:disabled),button:not(:disabled)');
+      if (target) target.focus({preventScroll:true});
+      else if (!$('deal-btn').disabled) $('deal-btn').focus({preventScroll:true});
+    }
+  }
+
+  const CHIP_COLORS = { 5:'#ab5549', 25:'#4c865b', 50:'#3c7182', 100:'#313b36', 500:'#8c6da1' };
+
+  function rememberBet() {
+    undoBets.push({ bet: bet(), trips: Number($('trips-input').value) || 0 });
+    if (undoBets.length > 30) undoBets.shift();
+  }
+
+  function setOpeningBets(amount, side) {
+    state.round = null;
+    state.bets[state.game] = amount;
+    state.bets.trips = side;
+    syncInputs();
+    save();
+    render();
+  }
+
+  function selectChip(amount) {
+    if (locked()) return;
+    selectedChip = amount;
+    renderChipSelection();
+    sound('chip');
+  }
+
+  function renderChipSelection() {
+    document.querySelectorAll('[data-chip]').forEach(el => {
+      const selected = Number(el.dataset.chip) === selectedChip;
+      el.classList.toggle('selected', selected);
+      el.setAttribute('aria-pressed', String(selected));
+    });
+    $('selected-chip-label').textContent = compact(selectedChip) + ' selected';
+    $('chip-instruction').textContent = locked() ? 'YOUR CHIPS ARE IN PLAY.' : 'SELECT A CHIP. CLICK A CIRCLE.';
+  }
+
+  function chipStack(amount) {
+    if (!amount) return '';
+    let remaining = amount;
+    const piles = [];
+    for (const denomination of [500,100,50,25,5]) {
+      const count = Math.floor(remaining / denomination);
+      if (count) { piles.push({ denomination, count }); remaining = cents(remaining - count * denomination); }
+    }
+    if (remaining) piles.push({ denomination: remaining, count: 1 });
+    return '<span class="coin-group" aria-hidden="true">' + piles.slice(0,3).map(pile => '<span class="coin-pile">' + Array.from({length:Math.min(pile.count,4)},(_,i) => '<span class="table-chip" style="--chip-color:' + (CHIP_COLORS[pile.denomination] || '#94794c') + ';--level:' + i + '"><span>' + compact(pile.denomination) + '</span></span>').join('') + '</span>').join('') + '</span>';
+  }
+
+  function wagerCircle(zone, label, amount, options = {}) {
+    const result = finalVisible() ? options.result : '';
+    const outcome = result === 'win' || result === 'blackjack' ? 'win' : result === 'lose' || result === 'bust' ? 'lose' : result === 'push' ? 'push' : '';
+    const enabled = options.enabled ?? !locked();
+    const hint = options.hint || (enabled ? 'Add ' + compact(selectedChip) + ' to ' + label : label + ' is locked for this hand');
+    return '<button class="wager-zone ' + (options.className || '') + (outcome ? ' zone-' + outcome : '') + (lastChipZone === zone ? ' zone-pop' : '') + '" data-zone="' + zone + '" aria-label="' + escape(label + ', ' + compact(amount) + '. ' + hint) + '" title="' + escape(hint) + '"' + (enabled ? '' : ' disabled') + '><span class="zone-label">' + label + '</span><span class="zone-oval"></span>' + (amount ? chipStack(amount) : '<span class="zone-empty">' + (zone === 'play' ? '<span class="zone-hint">' + (active() ? 'PLAY' : 'AFTER DEAL') + '</span>' : '+') + '</span>') + '<span class="zone-value">' + (amount ? compact(amount) : zone === 'trips' ? 'OPTIONAL' : zone === 'play' ? 'PLAY BET' : 'PLACE BET') + '</span></button>';
+  }
+
+  function renderWagers() {
+    const r = state.round;
+    if (ultimate()) {
+      const played = r?.play || 0;
+      const amounts = { ante:r?.ante ?? bet(), blind:r?.blind ?? bet(), trips:r?.trips ?? trips(), play:played };
+      const result = name => r?.breakdown?.find(item => item.label.toLowerCase() === name)?.result;
+      $('betting-spots').innerHTML = ['trips','ante','blind','play'].map(zone => wagerCircle(zone,zone.toUpperCase(),amounts[zone],{
+        className:'poker-spot spot-' + zone,
+        result:result(zone),
+        enabled:zone === 'play' ? !busy && active() && !played && E.ultimateActions(r,state.balance).some(action=>action.startsWith('play')) : !locked(),
+        hint:zone === 'play' ? 'Make your Play bet using the available raise options.' : zone === 'trips' ? 'Add a Trips side bet. It pays independently of the dealer.' : 'Ante and Blind always match. Each click adds a chip to both.'
+      })).join('') + '<span class="bet-equals" aria-hidden="true">=</span>';
+      $('felt-brand').querySelector('.felt-payout').textContent = 'DEALER QUALIFIES WITH A PAIR OR BETTER';
+      $('table-paytable').innerHTML = '<h3>THE PAY TABLE</h3><table><thead><tr><th>Your hand</th><th>Blind</th><th>Trips</th></tr></thead><tbody>' + [['Royal flush','500:1','50:1'],['Straight flush','50:1','40:1'],['Four of a kind','10:1','30:1'],['Full house','3:1','8:1'],['Flush','3:2','7:1'],['Straight','1:1','4:1'],['Three of a kind','Push','3:1']].map(row => '<tr>' + row.map(cell=>'<td>'+cell+'</td>').join('') + '</tr>').join('') + '</tbody></table><p>BLIND: MUST BEAT THE DEALER<br>TRIPS: PAYS EVEN IF YOU FOLD</p>';
+    } else {
+      const hands = r?.hands || [{bet:bet()}];
+      $('betting-spots').innerHTML = '<div class="blackjack-bets ' + (hands.length > 1 ? 'split-bets' : '') + '">' + hands.map((h,i) => '<div class="spot-wrap">' + wagerCircle('blackjack',hands.length > 1 ? 'HAND ' + (i+1) : 'YOUR BET',h.bet,{result:h.result,enabled:!locked()}) + '</div>').join('') + '</div>' + (r && (r.phase === 'insurance' || r.insurance.bet) ? wagerCircle('insurance','INSURANCE',r.insurance.bet,{className:'spot-insurance',result:r.insurance.result,enabled:!busy && r.phase === 'insurance' && E.blackjackActions(r,state.balance).includes('insurance'),hint:'Insure for half the original bet. Pays 2:1 on dealer blackjack.'}) : '');
+      $('felt-brand').querySelector('.felt-payout').textContent = 'BLACKJACK PAYS 3 TO 2';
+      $('table-paytable').innerHTML = '<h3>AT THIS TABLE</h3><table><tbody><tr><td>Blackjack</td><td>3:2</td></tr><tr><td>Win</td><td>1:1</td></tr><tr><td>Insurance</td><td>2:1</td></tr><tr><td>Equal totals</td><td>Push</td></tr></tbody></table><p>6 DECKS · DEALER HITS SOFT 17<br>DOUBLE AFTER SPLIT ALLOWED</p>';
+    }
+    const net = finalVisible() ? r.returned-r.wagered : 0;
+    $('table').classList.toggle('result-win',net>0);
+    $('table').classList.toggle('result-loss',net<0);
+    lastChipZone = '';
+  }
+
+  function flyChip(zone) {
+    if (reducedMotion.matches) return;
+    const source = document.querySelector('[data-chip="' + selectedChip + '"]');
+    const target = document.querySelector('[data-zone="' + zone + '"]');
+    if (!source || !target) return;
+    const from = source.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    const chip = document.createElement('span');
+    chip.className = 'flying-chip';
+    chip.style.left = (from.left + from.width/2 - 21) + 'px';
+    chip.style.top = (from.top + from.height/2 - 21) + 'px';
+    chip.innerHTML = '<span class="table-chip" style="--chip-color:' + CHIP_COLORS[selectedChip] + '"><span>' + compact(selectedChip) + '</span></span>';
+    document.body.append(chip);
+    const dx = to.left+to.width/2-from.left-from.width/2;
+    const dy = to.top+to.height/2-from.top-from.height/2;
+    const animation = chip.animate([{transform:'translate(0,0) rotate(0)'},{transform:'translate('+dx+'px,'+dy+'px) rotate(25deg)'}],{duration:320,easing:'cubic-bezier(.2,.7,.3,1)'});
+    animation.onfinish = () => chip.remove();
+    animation.oncancel = () => chip.remove();
+  }
+
+  function placeChip(zone, remove = false) {
+    if (zone === 'play') {
+      if (busy || !active() || !ultimate()) return;
+      if (state.round.phase === 'flop') { void act('play2'); return; }
+      if (state.round.phase === 'river') { void act('play1'); return; }
+      toast('Choose Play 3× or Play 4× on the control rail.');
+      focusActions();
+      return;
+    }
+    if (zone === 'insurance') { if (!busy) void act('insurance'); return; }
+    if (locked()) return;
+    const isTrips = zone === 'trips';
+    const amount = (isTrips ? trips() : bet()) + (remove ? -selectedChip : selectedChip);
+    if (amount < 0) { toast('This circle has fewer chips than the selected denomination. Use Clear or Edit amount.'); return; }
+    if (amount > (isTrips ? 100 : maxBet())) { toast((isTrips ? 'Trips' : ultimate() ? 'Ante / Blind' : 'This table') + ' has a ' + compact(isTrips ? 100 : maxBet()) + ' limit. Select a smaller chip.'); return; }
+    const nextBet = isTrips ? bet() : amount;
+    const nextTrips = isTrips ? amount : Number($('trips-input').value)||0;
+    const required = ultimate() ? nextBet*3+nextTrips : nextBet;
+    if (required > state.balance) { toast('Not enough chips for that bet' + (ultimate() ? ' and the minimum Play.' : '.') + ' Add free chips with +.'); return; }
+    rememberBet();
+    lastChipZone = zone;
+    setOpeningBets(nextBet,nextTrips);
+    sound('chip');
+    if (!remove) { flyChip(zone); if (ultimate() && !isTrips) flyChip(zone === 'ante' ? 'blind' : 'ante'); }
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else toast('Your browser does not support fullscreen here. The table still fits your window.');
+    } catch { toast('Fullscreen could not open. You can keep playing in this window.'); }
+  }
+
+  function syncFullscreen() {
+    const isFullscreen = Boolean(document.fullscreenElement);
+    $('fullscreen-btn').setAttribute('aria-pressed',String(isFullscreen));
+    $('fullscreen-btn').setAttribute('aria-label',isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
+    $('fullscreen-btn').title = isFullscreen ? 'Exit fullscreen · Esc' : 'Enter fullscreen';
+    $('fullscreen-btn').querySelector('span').textContent = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
+    $('fullscreen-hint').textContent = isFullscreen ? 'Press Esc to leave fullscreen' : 'Your seat. Your pace.';
   }
 
   function switchGame(game) {
@@ -446,6 +603,8 @@
     if (game === state.game) return;
     state.game = game;
     state.round = null;
+    undoBets = [];
+    if (game === 'ultimate' && selectedChip > 100) selectedChip = 25;
     view = null;
     syncInputs();
     save();
@@ -492,12 +651,20 @@
     if (!target || target.disabled) return;
     if (target.dataset.game) { switchGame(target.dataset.game); return; }
     if (target.dataset.open) { showDialog(target.dataset.open); return; }
-    if (target.dataset.chip) { adjustBet(null,Number(target.dataset.chip)); return; }
+    if (target.dataset.chip) { selectChip(Number(target.dataset.chip)); return; }
+    if (target.dataset.zone) { placeChip(target.dataset.zone); return; }
     if (target.dataset.adjust) { adjustBet(target.dataset.adjust); return; }
     const action = target.dataset.action;
     if (action === 'deal') void deal();
     else if (action === 'details') showDialog('details');
-    else if (action === 'bet') { document.querySelector('.betting-panel').scrollIntoView({behavior:reducedMotion.matches ? 'instant' : 'smooth'}); $('bet-input').focus({preventScroll:true}); }
+    else if (action === 'bet') { if (!locked()) { $('bet-dialog').showModal(); $('bet-input').focus(); } }
+    else if (action === 'clear') { if (!locked()) { rememberBet(); setOpeningBets(0,0); sound('chip'); } }
+    else if (action === 'undo') { if (!locked() && undoBets.length) { const previous = undoBets.pop(); setOpeningBets(previous.bet,previous.trips); sound('chip'); } }
+    else if (action === 'repeat') {
+      if (locked()) return;
+      const previous = state.lastBets?.[state.game] || (state.round ? {bet:state.round.initialBet || state.round.ante,trips:state.round.trips || 0} : {bet:25,trips:0});
+      rememberBet(); setOpeningBets(previous.bet,previous.trips); sound('chip');
+    }
     else if (action === 'refill') {
       if (locked()) return;
       state.balance = cents(state.balance + 10000);
@@ -505,6 +672,10 @@
     } else if (action) void act(action);
   });
   $('deal-btn').addEventListener('click',() => void deal());
+  $('fullscreen-btn').addEventListener('click',() => void toggleFullscreen());
+  document.addEventListener('fullscreenchange',syncFullscreen);
+  $('bet-dialog-close').addEventListener('click',() => $('bet-dialog').close());
+  $('bet-editor-done').addEventListener('click',() => $('bet-dialog').close());
   $('bankroll-btn').addEventListener('click',() => showDialog('bankroll'));
   $('dialog-close').addEventListener('click',() => $('info-dialog').close());
   $('info-dialog').addEventListener('click',event => { if (event.target === $('info-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } });
@@ -512,12 +683,47 @@
   for (const id of ['bet-input','trips-input']) {
     $(id).addEventListener('input',() => {
       if (locked()) return;
-      if (!betError()) { state.bets[state.game] = bet(); state.bets.trips = Number($('trips-input').value) || 0; save(); }
-      updateBetting(); renderTable(); renderActions();
+      if (!betError()) { undoBets.push({bet:state.bets[state.game],trips:state.bets.trips}); if (undoBets.length>30) undoBets.shift(); state.round = null; state.bets[state.game] = bet(); state.bets.trips = Number($('trips-input').value) || 0; save(); }
+      updateBetting(); renderTable(); renderActions(); renderWagers();
     });
   }
+  document.addEventListener('contextmenu',event => {
+    const target = event.target.closest('[data-zone]');
+    if (!target) return;
+    event.preventDefault();
+    if (!locked()) placeChip(target.dataset.zone,true);
+  });
+  document.addEventListener('dragstart',event => {
+    const chip = event.target.closest('[data-chip]');
+    if (!chip || locked()) { event.preventDefault(); return; }
+    selectChip(Number(chip.dataset.chip));
+    event.dataTransfer.setData('text/plain',chip.dataset.chip);
+    event.dataTransfer.effectAllowed = 'copy';
+  });
+  document.addEventListener('dragover',event => {
+    const target = event.target.closest('[data-zone]');
+    if (!target || target.disabled || locked()) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    target.classList.add('drag-over');
+  });
+  document.addEventListener('dragleave',event => event.target.closest('[data-zone]')?.classList.remove('drag-over'));
+  document.addEventListener('drop',event => {
+    const target = event.target.closest('[data-zone]');
+    if (!target || target.disabled || locked()) return;
+    event.preventDefault();
+    target.classList.remove('drag-over');
+    const value = Number(event.dataTransfer.getData('text/plain'));
+    if (![5,25,50,100,500].includes(value)) return;
+    selectedChip = value;
+    placeChip(target.dataset.zone);
+  });
   document.addEventListener('keydown',event => {
-    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || busy || $('info-dialog').open ||
+    if (event.key === 'Escape' && document.fullscreenElement && !$('info-dialog').open && !$('bet-dialog').open) {
+      void document.exitFullscreen().catch(()=>{});
+      return;
+    }
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || busy || $('info-dialog').open || $('bet-dialog').open ||
         ['INPUT','TEXTAREA','SELECT','A'].includes(document.activeElement?.tagName)) return;
     if (event.key === 'Enter' && !active() && document.activeElement?.tagName !== 'BUTTON') { event.preventDefault(); void deal(); return; }
     if (ultimate()) return;
