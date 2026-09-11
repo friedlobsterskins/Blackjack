@@ -1,0 +1,238 @@
+/* A closer seat in the Royale Room. All live objects remain DOM controls. */
+body { background: #17100c; }
+.casino-app {
+  background: linear-gradient(#120d0899, #100c0733 24%, #120e09aa),
+    url('assets/royale-lounge.png') center / cover no-repeat;
+}
+.topbar {
+  background: linear-gradient(90deg, #191510ed, #172219e8, #191510ed);
+  border-bottom: 1px solid #d4a76144;
+  box-shadow: 0 8px 24px #0004;
+}
+.brand-mark { text-shadow: 0 0 22px #edbf6366; }
+.game-tabs { background: #110e0ac4; border-color: #b794573d; }
+.game-tab.active { background: linear-gradient(130deg, #b385453d, #8463271c); }
+.fullscreen-button { background: #b68c4220; }
+.card {
+  background: linear-gradient(115deg, #fffdf5, #f8efdf);
+  box-shadow: 2px 7px 10px #041d1199, inset 0 0 0 1px #ffffffad;
+  border-radius: 6px;
+}
+.face-card .card-center {
+  font-size: calc(var(--card-h) * .45);
+  background: repeating-linear-gradient(45deg, #a9976810 0 2px, transparent 2px 6px);
+  border: 2px double currentColor;
+  border-radius: 35% 35% 3px 3px;
+}
+.card-back:before {
+  background:
+    repeating-conic-gradient(#bbaa692b 0 25%, transparent 0 50%) 0 0 / 9px 9px,
+    linear-gradient(135deg, #184433, #0b2a20);
+  border: 2px double #bba461;
+}
+.card-back:after {
+  border-radius: 45% 45% 45% 45%;
+  box-shadow: 0 0 0 3px #173b29, 0 0 0 4px #bba46177;
+  background: radial-gradient(#2a5139, #133326);
+}
+.card-placeholder {
+  background: #0d362329;
+  box-shadow: inset 0 0 20px #081c131c;
+  border: 1px dashed #d5d7b349;
+}
+.player-hand .hand { padding: 12px 8px 14px; }
+.player-hand .card {
+  transform: translateY(var(--fan-y, 0px)) rotate(var(--fan-angle, 0deg));
+  transform-origin: 50% 85%;
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+.player-hand .card + .card { margin-left: calc(var(--card-w) * -.13); }
+.player-hand .card:hover {
+  transform: translateY(calc(var(--fan-y, 0px) - 9px)) rotate(var(--fan-angle, 0deg));
+  box-shadow: 2px 12px 17px #041d1199;
+  z-index: 3;
+}
+.player-hand .card-placeholder:first-child { transform: rotate(-9deg) translateY(6px); }
+.player-hand .card-placeholder:last-child { transform: rotate(9deg) translateY(-3px); }
+.many-cards .card + .card { margin-left: calc(var(--card-w) * -.55); }
+.chip { box-shadow: 0 4px 0 color-mix(in srgb, var(--chip-color) 50%, #080907), 0 7px 10px #0008; }
+.chip.selected { box-shadow: 0 4px 0 #443c24, 0 0 0 7px #eec77612, 0 0 28px #e6bf5e48; }
+.zone-oval { border-color: #dfc58faa; box-shadow: inset 0 0 0 4px #d8c99310; }
+.zone-label { color: #f2ddac; text-shadow: 0 1px 3px #082a17; }
+.zone-value { background: #173425; border-color: #d9bb788a; }
+.table-chip { filter: saturate(1.12); }
+.table.result-win:after { box-shadow: inset 0 0 100px #f3d57e28; }
+.control-deck {
+  background: linear-gradient(120deg, #2b241aee, #192a1ef5 43%, #231d15f5);
+  border-color: #e1b77042;
+  box-shadow: 0 10px 35px #0007, inset 0 1px #e3c88626;
+}
+.console-status { border-color: #d8bc7b29; }
+.round-message strong { color: #f5e7c6; }
+.primary-button, .action-button.primary {
+  background: linear-gradient(120deg, #f9e5b1, #d2ad63);
+  box-shadow: 0 4px 0 #74522b, inset 0 1px 0 #fff9d8, 0 4px 15px #e4b6661a;
+}
+footer { color: #c0ab87; text-shadow: 0 1px 5px #000; }
+.lounge-welcome { display: none; }
+
+@media (min-width: 901px) and (min-height: 601px) {
+  .casino-app { grid-template-rows: 76px minmax(0, 1fr) auto 28px; }
+  .topbar { padding-inline: max(28px, calc((100vw - 1600px) / 2)); }
+  .table-shell, .control-deck {
+    width: calc(100% - 54px);
+    max-width: min(1460px, calc((100dvh - 225px) * 2.1));
+    margin-inline: auto;
+  }
+  .table-shell { padding: 24px 0 0; }
+  .table {
+    --card-h: clamp(65px, 19cqh, 125px);
+    --card-w: calc(var(--card-h) * .7);
+    border: 14px solid #342c20;
+    border-top-width: 9px;
+    border-bottom-width: 22px;
+    border-radius: 120px 120px 190px 190px / 48px 48px 94px 94px;
+    background: radial-gradient(ellipse at 53% 43%, #337358, #245d45 42%, #164431 85%);
+    box-shadow: 0 0 0 1px #b08b4e, 0 0 0 5px #3a2d1c,
+      0 0 0 7px #8a66365e, 0 18px 45px #0009,
+      inset 0 0 0 2px #d1b77573, inset 0 0 0 5px #172f21,
+      inset 0 0 55px #081f14a8;
+  }
+  .felt-line {
+    inset: 13px;
+    border-color: #f0d18c32;
+    border-radius: 100px 100px 175px 175px / 40px 40px 82px 82px;
+  }
+  .felt-grain { opacity: .18; }
+  .table-topline { top: 18px; left: 32px; right: 30px; }
+  .table-topline #table-name { display: none; }
+  .table-topline #table-number { display: inline; }
+  .table-seal, .felt-paytable { display: none; }
+  .lounge-welcome {
+    display: block;
+    position: absolute;
+    left: 6.5%;
+    top: 12%;
+    width: 24%;
+    color: #f0d7a7;
+    transform: rotate(-3deg);
+  }
+  .lounge-welcome > span { font-size: 7px; letter-spacing: 2px; color: #c5b787; }
+  .lounge-welcome strong {
+    display: block;
+    font: italic 500 clamp(23px, 3.8cqh, 34px) var(--serif);
+    letter-spacing: -.7px;
+    margin-top: 9px;
+  }
+  .lounge-welcome small { display: block; font-size: 9px; color: #bdc5a6; margin-top: 7px; }
+  .felt-brand, .ultimate-table .felt-brand {
+    top: 34%; left: 6.5%; transform: rotate(-3deg); width: 21%;
+    text-align: left; white-space: normal;
+  }
+  .felt-brand-name, .ultimate-table .felt-brand-name {
+    font-size: clamp(23px, 4cqh, 36px);
+    font-weight: 500;
+    letter-spacing: -.6px;
+    line-height: 1.12;
+    color: #e4dbb085;
+    text-wrap: balance;
+  }
+  .felt-payout, .ultimate-table .felt-payout {
+    font-family: var(--font); font-size: 7px; letter-spacing: 1px;
+    line-height: 1.7; color: #c7cda17f; margin-top: 10px;
+  }
+  .shoe-prop { top: 18%; left: auto; right: 7%; transform: rotate(17deg); }
+  .dealer-zone, .ultimate-table .dealer-zone {
+    --card-h: clamp(65px, 17cqh, 110px);
+    --card-w: calc(var(--card-h) * .7);
+    top: 7%; left: 55%;
+  }
+  .dealer-zone .hand-caption {
+    position: absolute; top: 50%; left: calc(100% + 18px); width: 115px;
+    text-align: left; font-size: 9px; line-height: 1.6; margin: 0;
+  }
+  .dealer-zone .hand { gap: 9px; }
+  .community-zone {
+    --card-h: clamp(74px, 20cqh, 140px);
+    --card-w: calc(var(--card-h) * .7);
+    top: 31%; left: 57%;
+  }
+  .community-hand { gap: 9px; }
+  .community-label {
+    grid-template-columns: calc(var(--card-w)*3 + 18px) calc(var(--card-w) + 15px) calc(var(--card-w) + 15px);
+    font-size: 8px;
+  }
+  .player-zone, .ultimate-table .player-zone {
+    --card-h: clamp(104px, 28cqh, 184px);
+    --card-w: calc(var(--card-h) * .7);
+  }
+  .ultimate-table .player-zone { left: 4%; width: 30%; bottom: 9%; right: auto; }
+  .ultimate-table .hand-title { font-size: 12px; }
+  .player-seat { margin-top: 8px; }
+  .player-seat .avatar { background: #a6884524; border-color: #e3c78388; }
+  .blackjack-table .player-zone { left: 31%; right: 14%; bottom: 23%; }
+  .blackjack-table .blackjack-bets { left: 31%; right: 14%; bottom: 6%; }
+  .blackjack-table:has(.split-hands) .player-zone { left: 4%; right: 4%; }
+  .blackjack-table:has(.split-hands) .blackjack-bets { left: 4%; right: 4%; }
+  .blackjack-table:has(.split-hands) .felt-brand { display: none; }
+  .split-hands .hand { --card-h: clamp(74px, 21cqh, 148px); --card-w: calc(var(--card-h)*.7); }
+  .wager-zone { --zone-w: clamp(88px, 12cqw, 152px); --zone-h: clamp(51px, 13cqh, 94px); }
+  .coin-pile { --coin-size: clamp(34px, 8.7cqh, 64px); }
+  .spot-trips { left: 43%; bottom: 6%; }
+  .spot-ante { left: 61%; bottom: 6%; }
+  .spot-blind { left: 79%; bottom: 6%; }
+  .spot-play { left: 61%; bottom: 27%; }
+  .bet-equals { left: 70%; bottom: 11%; }
+  .table-bottom { font-size: 7px; bottom: 9px; }
+  .table-bottom-right { display: none; }
+  .control-deck { padding: 0 23px 13px; border-radius: 0 0 18px 18px; }
+  .control-rail { grid-template-columns: minmax(340px,1fr) 120px minmax(275px,1fr); gap: 18px; }
+  .chip { width: 48px; height: 48px; flex-basis: 48px; font-size: 12px; }
+  .chip > span { width: 31px; height: 31px; }
+  .chip-selector { gap: 12px; }
+  .chip-tools { gap: 17px; }
+  .action-button, .primary-button { min-width: 65px; padding: 14px 17px; font-size: 12px; }
+  .deal-button { min-width: 175px; }
+  .console-status { min-height: 46px; }
+  .round-message > div { gap: 12px; }
+  .round-message strong { font-size: 12px; }
+  .round-message small { font-size: 10px; }
+}
+
+@media (min-width: 901px) and (max-height: 740px) and (min-height: 601px) {
+  .table-shell, .control-deck { max-width: min(1240px, calc((100dvh - 195px) * 2.4)); }
+  .table-shell { padding-top: 15px; }
+  .casino-app { grid-template-rows: 62px minmax(0,1fr) auto 22px; }
+  .dealer-zone .hand-caption { width: 90px; font-size: 8px; }
+  .player-zone, .ultimate-table .player-zone { --card-h: clamp(90px,26cqh,135px); --card-w: calc(var(--card-h)*.7); }
+  .control-rail { gap: 12px; grid-template-columns: minmax(310px,1fr) 98px minmax(260px,1fr); }
+  .control-deck { padding-inline: 14px; }
+  .chip { width: 41px; height: 41px; flex-basis: 41px; font-size: 10px; }
+  .chip > span { width: 27px; height: 27px; }
+  .chip-selector { gap: 10px; }
+  .action-button, .primary-button { font-size: 11px; padding: 12px; }
+  .lounge-welcome small { font-size: 8px; }
+}
+
+@media (max-width: 900px), (max-height: 600px) {
+  .table { border-color: #463a25; box-shadow: 0 0 0 1px #c5a56a88, inset 0 0 0 2px #bba26755, 0 9px 24px #0009; }
+  .player-hand .hand { padding: 7px 4px 9px; }
+  .player-hand .card { transform: translateY(calc(var(--fan-y,0px) * .6)) rotate(var(--fan-angle,0deg)); }
+  .split-hands .hand { padding-inline: 0; }
+  .split-hands .card + .card { margin-left: calc(var(--card-w) * -.35); }
+}
+@media (max-width: 650px) {
+  .casino-app { background-position: 45% center; }
+  .topbar { background: #171b14ed; }
+  .table-shell { padding-inline: 10px; }
+  .control-deck { margin-inline: 13px; }
+  .player-hand .hand { padding-block: 8px 11px; }
+  .ultimate-table .player-zone { bottom: 22%; }
+  .blackjack-table .player-zone { bottom: 22%; }
+  .ultimate-table .felt-brand-name { font-style: italic; font-size: 21px !important; letter-spacing: -.4px; }
+  .felt-brand-name { text-transform: none; }
+  .card-corner { font-size: calc(var(--card-h)*.21); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-hand .card { transition: none; }
+}
