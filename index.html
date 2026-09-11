@@ -1,131 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#04101a" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Lac-Leamy Dealer Trainer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101513">
+  <meta name="description" content="Take a seat at Club Royale. Play casino blackjack and Ultimate Texas Hold’em with a free virtual bankroll.">
+  <title>Club Royale — Your seat is waiting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="game-engine.js" defer></script>
+  <script src="script.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <h1>CASINO LAC-LEAMY</h1>
-      <span>Dealer trainer</span>
-    </div>
-
-    <div class="topbar-center">
-      <div id="center-console">
-        <button id="deal-btn" onclick="startRound()">Deal round</button>
-
-        <div id="action-hud" class="hud-hidden" aria-live="polite">
-          <div class="hud-text">
-            <span class="hud-kicker">Call total</span>
-            <span id="hud-title">SPOT 1 TOTAL</span>
-          </div>
-          <input type="number" id="hud-input" autocomplete="off" inputmode="numeric" />
-        </div>
-      </div>
-    </div>
-
-    <div class="tabs">
-      <button id="tab-game" class="active" onclick="switchTab('game')">Live Table</button>
-      <button id="tab-payout" onclick="switchTab('payout')">3:2 Payouts</button>
-    </div>
+    <a class="brand" href="./index.html" aria-label="Club Royale home"><span class="brand-mark" aria-hidden="true">♠</span><span>CLUB <b>ROYALE</b><small>THE VIRTUAL CASINO</small></span></a>
+    <nav class="main-nav" aria-label="Main navigation"><span class="nav-current">The casino</span><button class="text-button" data-open="rules">How to play <span aria-hidden="true">↗</span></button></nav>
+    <div class="wallet"><span class="wallet-icon" aria-hidden="true">♧</span><div><span class="eyebrow">YOUR BANKROLL</span><strong id="balance">$10,000.00</strong></div><button id="bankroll-btn" class="wallet-add" aria-label="Add free chips">+</button></div>
   </header>
-
-  <main id="game-mode">
-    <div class="table-shell" id="table-shell">
-      <div class="table-rail">
-        <div class="table-felt">
-          <div class="table-glow"></div>
-
-          <section class="dealer-zone">
-            <div class="dealer-caption">Dealer</div>
-            <div id="dealer-spot" class="spot dealer-spot">
-              <div class="hand" id="dealer-hand"></div>
-              <div class="status-text" id="dealer-status"></div>
-            </div>
-          </section>
-
-          <section class="table-copy">
-            <div class="felt-text subtle">DEALER MUST DRAW TO 16 AND HIT SOFT 17</div>
-          </section>
-
-          <section class="players-row" id="players-arc"></section>
+  <main class="casino-shell">
+    <section class="welcome"><div><p class="eyebrow gold">A LITTLE LUCK. ALL YOUR CALL.</p><h1>The table is <em>yours.</em></h1></div><div class="play-money"><span class="live-dot"></span><span>Real casino rules. Play money only.<small>Your first $10,000 is on the house.</small></span></div></section>
+    <div class="floor-layout">
+      <section class="game-space" aria-label="Casino table">
+        <nav class="game-tabs" aria-label="Choose your game">
+          <button class="game-tab active" id="tab-blackjack" data-game="blackjack" aria-pressed="true"><span class="tab-suit" aria-hidden="true">♠</span><span>Blackjack<small>THE CLASSIC 21</small></span><span class="tab-arrow" aria-hidden="true">↗</span></button>
+          <button class="game-tab" id="tab-ultimate" data-game="ultimate" aria-pressed="false"><span class="tab-suit" aria-hidden="true">♦</span><span>Ultimate Texas Hold’em<small>YOU VS. THE DEALER</small></span><span class="tab-arrow" aria-hidden="true">↗</span></button>
+        </nav>
+        <div class="table-container">
+          <div class="table-header"><div><span class="live-dot"></span><span id="table-name">BLACKJACK</span><span class="table-number" id="table-number">TABLE 01</span></div><div class="table-tools"><button id="sound-btn" class="icon-button" aria-label="Turn sound on" aria-pressed="false" title="Turn sound on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path id="sound-waves" d="m16 9 6 6m0-6-6 6"/></svg></button><button class="icon-button" data-open="rules" aria-label="Table rules" title="Table rules">i</button></div></div>
+          <div id="table" class="table blackjack-table">
+            <div class="felt-grain" aria-hidden="true"></div><div class="felt-line" aria-hidden="true"></div>
+            <div class="shoe-prop" aria-hidden="true"><div class="shoe-card">♠</div></div>
+            <div class="chip-rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <section class="dealer-zone" aria-label="Dealer hand"><div class="seat-label">DEALER <span id="dealer-total" class="total-badge" hidden></span></div><div class="hand" id="dealer-hand"></div><div class="hand-caption" id="dealer-caption">Your seat is ready</div></section>
+            <div class="felt-brand" id="felt-brand"><div class="felt-brand-name">BLACKJACK</div><div class="felt-payout">PAYS 3 TO 2</div><div class="felt-rule">DEALER HITS SOFT 17 <span>◆</span> INSURANCE PAYS 2 TO 1</div></div>
+            <section id="community-zone" class="community-zone" aria-label="Community cards" hidden><div class="community-label"><span>FLOP</span><span>TURN</span><span>RIVER</span></div><div class="community-hand" id="community-hand"></div><div id="street-caption" class="hand-caption">Five cards. One best hand.</div></section>
+            <section class="player-zone" aria-label="Your hands"><div id="player-hands" class="player-hands"></div><div class="player-seat"><span class="avatar" aria-hidden="true">♠</span><span>YOU<small id="player-caption">Take a seat. Make your play.</small></span></div></section>
+            <div class="table-limit" id="felt-limit">MIN $5 <span>·</span> MAX $500</div>
+          </div>
+          <div class="action-console"><div id="round-message" class="round-message" role="status" aria-live="polite"><span class="status-orb"></span><div><strong>Good evening. Let’s play.</strong><small>Choose your chips and place your bet.</small></div></div><div class="game-actions" id="game-actions"></div></div>
+          <div class="table-bottom"><span id="shoe-info">6-deck shoe · Shuffled and ready</span><button class="text-button" data-open="rules">Table rules <span aria-hidden="true">↗</span></button></div>
         </div>
-      </div>
-    </div>
-  </main>
-
-  <main id="payout-mode" style="display: none;">
-    <div class="payout-shell" id="payout-shell">
-      <div class="payout-widget random-mode" id="payout-widget">
-        <section class="payout-panel payout-panel-info">
-          <div class="payout-heading">
-            <span class="payout-kicker">Precision Drill</span>
-            <h2>Blackjack Payouts</h2>
-            <p id="payout-description">Enter the correct 3:2 payout for the bet below.</p>
-          </div>
-
-          <div class="payout-submodes">
-            <button id="payout-mode-random" class="active" onclick="setPayoutMode('random')">Random</button>
-            <button id="payout-mode-sprint" onclick="setPayoutMode('sprint')">Sprint 1-50</button>
-          </div>
-
-          <div class="random-meta" id="random-meta">
-            <div class="meta-pill current-streak-pill">
-              <span class="meta-label">Current streak</span>
-              <strong id="random-current-streak">0</strong>
-            </div>
-            <div class="meta-pill">
-              <span class="meta-label">Best streak</span>
-              <strong id="random-best-streak">0</strong>
-            </div>
-          </div>
-
-          <div class="sprint-meta" id="sprint-meta">
-            <div class="meta-pill">
-              <span class="meta-label">Progress</span>
-              <strong id="payout-progress">1 / 50</strong>
-            </div>
-            <div class="meta-pill">
-              <span class="meta-label">Time</span>
-              <strong id="payout-timer">00:00.00</strong>
-            </div>
-            <div class="meta-pill">
-              <span class="meta-label">Best time</span>
-              <strong id="sprint-best-time">-</strong>
-            </div>
-          </div>
+        <div class="below-table"><span><span class="small-spade" aria-hidden="true">♠</span> A seat at the casino. Wherever you are.</span><span>NO DEPOSITS. JUST THE GAME.</span></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel betting-panel" aria-labelledby="betting-title"><div class="panel-heading"><h2 id="betting-title">Place your bet</h2><span class="panel-step" id="betting-step">01 / 02</span></div><div class="bet-mode-label"><label id="bet-label" for="bet-input">YOUR BET</label><span id="bet-range">$5 – $500</span></div><div class="bet-input-wrap"><span>$</span><input id="bet-input" type="number" min="5" max="500" step="5" value="25" inputmode="numeric" aria-describedby="bet-help"><div class="bet-steppers"><button data-adjust="up" aria-label="Increase bet by 5">+</button><button data-adjust="down" aria-label="Decrease bet by 5">−</button></div></div><div class="bet-shortcuts"><button data-adjust="half">½ bet</button><button data-adjust="twice">2× bet</button><button data-adjust="max">Max</button></div><div class="chip-selector" aria-label="Add chips to your bet"><button class="chip chip-five" data-chip="5" aria-label="Add 5 dollars"><span>5</span></button><button class="chip chip-quarter" data-chip="25" aria-label="Add 25 dollars"><span>25</span></button><button class="chip chip-hundred" data-chip="100" aria-label="Add 100 dollars"><span>100</span></button><button class="chip chip-fivehundred" data-chip="500" aria-label="Add 500 dollars"><span>500</span></button></div><p class="bet-help" id="bet-help">Click a chip to add it to your bet.</p>
+          <div id="poker-bets" class="poker-bets" hidden><div class="matched-blind"><span>Blind <small>Matches your ante</small></span><strong id="blind-bet">$25</strong></div><label class="trips-label" for="trips-input"><span>Trips bonus <small>Optional side bet</small></span><span class="trips-input-wrap">$ <input id="trips-input" type="number" min="0" max="100" step="5" value="0" inputmode="numeric"></span></label><p class="bet-help">Keep at least 1× your ante available for Play.</p></div>
+          <div class="wager-total"><span id="wager-label">Total wager</span><strong id="wager-total">$25.00</strong></div><button class="primary-button deal-button" id="deal-btn"><span>Deal me in</span><span aria-hidden="true">→</span></button><p class="bet-error" id="bet-error" role="status"></p><p class="free-play-note"><span aria-hidden="true">◇</span> 100% virtual chips. Always free.</p>
         </section>
-
-        <section class="payout-panel payout-panel-stage">
-          <div class="payout-stage-card">
-            <div class="payout-stage-header">
-              <span class="stage-kicker">Current Bet</span>
-              <span class="stage-ratio">Pays 3:2</span>
-            </div>
-
-            <div class="bet-amount">$<span id="payout-bet"></span></div>
-
-            <label class="payout-answer-label" for="payout-input">Enter payout</label>
-            <input type="number" id="payout-input" step="any" placeholder="0.00" inputmode="decimal" />
-
-            <div id="payout-feedback" class="feedback-text"></div>
-            <div class="payout-actions">
-              <button id="payout-reset-btn" class="payout-reset-btn" type="button" onclick="resetCurrentPayoutModeState()">Reset</button>
-              <button id="payout-restart-btn" class="payout-restart-btn" type="button" onclick="restartSprint()">Restart sprint</button>
-            </div>
-          </div>
-        </section>
-      </div>
+        <section class="panel session-panel"><div class="panel-heading"><h2>Your session</h2><span class="session-dot"></span></div><div class="session-stats"><div><span>NET RESULT</span><strong id="session-net">$0.00</strong></div><div><span>HANDS PLAYED</span><strong id="session-hands">0</strong></div></div><div class="recent-heading"><h3>Recent hands</h3><button class="text-button" data-open="history">View all ↗</button></div><div id="recent-hands" class="recent-hands"><div class="history-empty"><span aria-hidden="true">♧</span><p>A fresh deck. A fresh start.<small>Your hands will appear here.</small></p></div></div></section>
+        <div class="sidebar-note"><span aria-hidden="true">✧</span><p>The thrill is real.<br><em>The money isn’t.</em></p></div>
+      </aside>
     </div>
+    <footer><a class="footer-brand" href="./index.html">♠ CLUB ROYALE</a><span>An independent casino simulation. No real-money wagering or cash value.</span><span>PLAY FOR THE LOVE OF THE GAME</span></footer>
   </main>
-
-  <script src="script.js"></script>
+  <dialog id="info-dialog" aria-labelledby="dialog-title"><div class="dialog-header"><div><p class="eyebrow gold" id="dialog-kicker">THE HOUSE RULES</p><h2 id="dialog-title">Table rules</h2></div><button id="dialog-close" class="icon-button" aria-label="Close dialog">×</button></div><div id="dialog-content"></div></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <noscript><div class="noscript">Please enable JavaScript to play Club Royale.</div></noscript>
 </body>
 </html>
