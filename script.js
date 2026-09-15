@@ -125,7 +125,8 @@
     document.querySelectorAll('[data-action="undo"]').forEach(el => { el.disabled = isLocked || !undoBets.length; });
     $('deal-btn').disabled = isLocked || Boolean(betError());
     $('deal-btn').hidden = isLocked;
-    $('deal-btn').innerHTML = '<span>' + (busy ? 'Dealing…' : active() ? 'Hand in progress' : state.round ? 'Deal again' : 'Deal me in') + '</span><span aria-hidden="true">→</span>';
+    $('deal-btn').innerHTML = '<span>' + (busy ? 'Dealing…' : active() ? 'Hand in progress' : state.round ? 'Deal again' : 'Deal me in') + '</span><kbd class="action-key" aria-hidden="true">↵</kbd>';
+    $('deal-btn').setAttribute('aria-keyshortcuts','Enter');
     $('bet-error').textContent = isLocked ? '' : betError();
     document.querySelectorAll('[data-game]').forEach(el => {
       el.disabled = isLocked && el.dataset.game !== state.game;
@@ -154,19 +155,55 @@
     render();
   }
 
+  // Conventional pip positions keep the value readable without relying on a
+  // single oversized suit. The two mirrored portraits use no external assets.
+  const PIP_LAYOUTS = {
+    A: [[50,50]],
+    2: [[50,12],[50,88]],
+    3: [[50,12],[50,50],[50,88]],
+    4: [[20,12],[80,12],[20,88],[80,88]],
+    5: [[20,12],[80,12],[50,50],[20,88],[80,88]],
+    6: [[20,12],[80,12],[20,50],[80,50],[20,88],[80,88]],
+    7: [[20,12],[80,12],[50,31],[20,50],[80,50],[20,88],[80,88]],
+    8: [[20,12],[80,12],[50,31],[20,50],[80,50],[50,69],[20,88],[80,88]],
+    9: [[20,12],[80,12],[20,37],[80,37],[50,50],[20,63],[80,63],[20,88],[80,88]],
+    10: [[20,12],[80,12],[50,25],[20,37],[80,37],[20,63],[80,63],[50,75],[20,88],[80,88]]
+  };
+
+  function courtHTML(card) {
+    const ink = card.suit === 'H' || card.suit === 'D' ? '#ad3547' : '#24475d';
+    const crown = card.rank === 'J'
+      ? '<path d="M20 13L24 5 40 9 43 16 20 16Z" fill="' + ink + '"/><path d="M25 5L35 2 40 9" fill="#d4ac5f"/>'
+      : '<path d="M21 15L18 5 27 9 32 2 37 9 46 5 43 15Z" fill="#d4ac5f"/><path d="M21 13H43" stroke="#80552d"/>';
+    const hair = card.rank === 'Q'
+      ? '<path d="M21 17Q16 19 18 32L24 34 26 20M41 17Q48 23 44 34L38 30 37 20" fill="#c99743"/>'
+      : '<path d="M22 16L20 24 26 24 27 17M39 16L43 26 38 27 36 18" fill="#45392e"/>';
+    const face = '<path d="M24 16H40L39 27 33 32 25 27Z" fill="#f2d8ab" stroke="#80552d" stroke-width=".8"/><path d="M27 20H29M35 20H37M32 20L31 24 34 24M30 27H35" fill="none" stroke="#554534" stroke-width=".9"/>';
+    const beard = card.rank === 'K' ? '<path d="M25 26L32 36 39 26 35 29 29 29Z" fill="#755238"/>' : '';
+    const portrait = '<path d="M5 44L12 34 25 29 32 34 40 29 54 34 59 44Z" fill="' + ink + '"/><path d="M12 34L26 44H39L25 30M42 31L31 44H44L51 34" fill="#d4ac5f"/><path d="M17 34L29 44M45 33L36 44" stroke="#fff0c6" stroke-width="2"/>' + hair + face + beard + crown + '<path d="M9 29V43M55 28V43" stroke="#b28b48" stroke-width="2"/><text x="8" y="27" font-size="14" text-anchor="middle" fill="' + ink + '">' + SUITS[card.suit] + '</text><path d="M52 23L55 14 58 23 55 29Z" fill="#d4ac5f"/>';
+    return '<svg class="court-art" viewBox="0 0 64 88" aria-hidden="true" focusable="false"><rect x="1" y="1" width="62" height="86" rx="2" fill="#f8f0da" stroke="' + ink + '" stroke-width="1.5"/><g>' + portrait + '</g><g transform="rotate(180 32 44)">' + portrait + '</g><path d="M4 44H60" stroke="#d4ac5f" stroke-width="2"/></svg>';
+  }
+
   function cardHTML(card, options = {}) {
     const classes = ['card'];
     const fanPosition = options.fanIndex === undefined ? 0 : options.fanIndex - (options.fanCount - 1)/2;
     const fanAngle = fanPosition * Math.min(18, 38 / Math.max(1, (options.fanCount || 1)-1));
-    const fanStyle = options.fanIndex === undefined ? '' : ' style="--fan-angle:' + fanAngle + 'deg;--fan-y:' + (-fanPosition*10) + 'px"';
+    const properties = [];
+    if (options.fanIndex !== undefined) properties.push('--fan-angle:' + fanAngle + 'deg','--fan-y:0px');
+    if (options.cardIndex !== undefined) properties.push('--card-index:' + options.cardIndex);
+    const cardStyle = properties.length ? ' style="' + properties.join(';') + '"' : '';
     if (options.animate) classes.push('dealt');
-    if (!card) return '<div class="card card-placeholder" aria-label="Empty card position"><span aria-hidden="true">♠</span></div>';
-    if (options.hidden) return '<div class="' + classes.join(' ') + ' card-back" role="img" aria-label="Face-down card"></div>';
+    if (!card) return '<div class="card card-placeholder"' + cardStyle + ' aria-label="Empty card position"><span aria-hidden="true">♠</span></div>';
+    if (options.hidden) return '<div class="' + classes.join(' ') + ' card-back"' + cardStyle + ' role="img" aria-label="Face-down card"><span class="card-back-emblem" aria-hidden="true">♠</span></div>';
     if (card.suit === 'H' || card.suit === 'D') classes.push('red');
     if (['J','Q','K'].includes(card.rank)) classes.push('face-card');
+    if (card.rank === 'A') classes.push('ace-card');
     if (options.best) classes.push('best-card');
     const corner = '<span>' + escape(card.rank) + '</span><small>' + SUITS[card.suit] + '</small>';
-    return '<div class="' + classes.join(' ') + '"' + fanStyle + ' role="img" aria-label="' + escape(card.rank + ' of ' + SUIT_NAMES[card.suit]) + '"><div class="card-corner" aria-hidden="true">' + corner + '</div><div class="card-center" aria-hidden="true">' + (['J','Q','K'].includes(card.rank) ? ({J:'♞',Q:'♛',K:'♚'}[card.rank]) : SUITS[card.suit]) + '</div><div class="card-corner bottom" aria-hidden="true">' + corner + '</div></div>';
+    const center = PIP_LAYOUTS[card.rank]
+      ? '<div class="card-pips" aria-hidden="true">' + PIP_LAYOUTS[card.rank].map(([x,y]) => '<span class="pip' + (y > 50 ? ' inverted' : '') + '" style="left:' + x + '%;top:' + y + '%">' + SUITS[card.suit] + '</span>').join('') + '</div>'
+      : '<div class="card-center" aria-hidden="true">' + courtHTML(card) + '</div>';
+    return '<div class="' + classes.join(' ') + '"' + cardStyle + ' role="img" aria-label="' + escape(card.rank + ' of ' + SUIT_NAMES[card.suit]) + '"><div class="card-corner" aria-hidden="true">' + corner + '</div>' + center + '<div class="card-corner bottom" aria-hidden="true">' + corner + '</div></div>';
   }
 
   function finalVisible() { return state.round?.phase === 'settled' && !busy; }
@@ -202,8 +239,9 @@
     const dealerCount = r ? (view?.dealerCount ?? r.dealer.length) : 0;
     const reveal = view?.dealerReveal ?? settled;
     const visibleDealer = r ? r.dealer.slice(0, dealerCount) : [];
+    $('dealer-hand').classList.toggle('blackjack-hand',!ultimate());
     $('dealer-hand').classList.toggle('many-cards', dealerCount > 4);
-    $('dealer-hand').innerHTML = r ? visibleDealer.map((c,i) => cardHTML(c, { hidden: !reveal && (ultimate() || i > 0), animate: view?.newCard === 'd' + i })).join('') : cardHTML(null) + cardHTML(null);
+    $('dealer-hand').innerHTML = r ? visibleDealer.map((c,i) => cardHTML(c, { hidden: !reveal && (ultimate() || i > 0), animate: view?.newCard === 'd' + i, cardIndex:ultimate() ? undefined : i })).join('') : cardHTML(null,{cardIndex:ultimate() ? undefined : 0}) + cardHTML(null,{cardIndex:ultimate() ? undefined : 1});
     const shownDealer = !ultimate() ? visibleDealer.filter((_,i) => reveal || i === 0) : [];
     $('dealer-total').hidden = !shownDealer.length || ultimate();
     $('dealer-total').textContent = shownDealer.length ? totalText(shownDealer) : '';
@@ -219,7 +257,7 @@
       const label = rank || (r ? 'YOUR HOLE CARDS' : 'YOUR HAND');
       const wagers = r ? [['ANTE',r.ante],['BLIND',r.blind],['PLAY',r.play], ...(r.trips ? [['TRIPS',r.trips]] : [])] : [['ANTE',bet()],['BLIND',bet()]];
       $('player-hands').className = 'player-hands';
-      $('player-hands').innerHTML = '<div class="player-hand ' + (settled ? r.result === 'win' ? 'won' : r.result === 'lose' ? 'lost' : '' : r ? 'active' : '') + '"><div class="hand-title">' + escape(label) + '</div><div class="hand">' + (r ? cards.map((c,i) => cardHTML(c,{best:bestCard(c),animate:view?.newCard === 'p0-' + i,fanIndex:i,fanCount:cards.length})).join('') : cardHTML(null) + cardHTML(null)) + '</div><div class="poker-wagers">' + wagers.map(([name,value]) => '<div class="poker-wager"><small>' + name + '</small>' + compact(value) + '</div>').join('') + '</div></div>';
+      $('player-hands').innerHTML = '<div class="player-hand ' + (settled ? r.result === 'win' ? 'won' : r.result === 'lose' ? 'lost' : '' : r ? 'active' : '') + '"><div class="hand-title">' + escape(label) + '</div><div class="hand hole-cards">' + (r ? cards.map((c,i) => cardHTML(c,{best:bestCard(c),animate:view?.newCard === 'p0-' + i,fanIndex:i,fanCount:2})).join('') : cardHTML(null) + cardHTML(null)) + '</div><div class="poker-wagers">' + wagers.map(([name,value]) => '<div class="poker-wager"><small>' + name + '</small>' + compact(value) + '</div>').join('') + '</div></div>';
       $('player-caption').textContent = settled ? r.result === 'fold' ? 'Folded · Trips settled independently' : 'Best five of seven' : r ? 'Play against the dealer' : 'Make yourself at home.';
       $('shoe-info').textContent = 'Single deck · Fresh shuffle every hand';
     } else {
@@ -229,59 +267,63 @@
         const cards = playerCards(i,hand.cards);
         const focused = !busy && r.phase === 'player' && i === r.activeHand;
         const result = settled ? ({ blackjack:'BLACKJACK', win:'WIN', lose:'LOSE', push:'PUSH', bust:'BUST' }[hand.result]) : hand.done && !busy ? (E.blackjackValue(hand.cards).total > 21 ? 'BUST' : 'STAND') : hands.length > 1 ? 'HAND ' + (i + 1) : 'YOUR HAND';
-        return '<div class="player-hand ' + (focused ? 'active ' : '') + (settled ? hand.returned > hand.bet ? 'won' : hand.returned < hand.bet ? 'lost' : '' : '') + '"><div class="hand-title">' + result + (cards.length ? '<span class="total-badge">' + totalText(cards) + '</span>' : '') + '</div><div class="hand ' + (cards.length > 4 ? 'many-cards' : '') + '">' + cards.map((c,j) => cardHTML(c,{animate:view?.newCard === 'p' + i + '-' + j,fanIndex:j,fanCount:cards.length})).join('') + '</div><div class="bet-on-table">' + compact(hand.bet) + '</div></div>';
-      }).join('') : '<div class="player-hand"><div class="hand-title">YOUR HAND</div><div class="hand">' + cardHTML(null) + cardHTML(null) + '</div><div class="bet-on-table">' + compact(bet() || 0) + '</div></div>';
+        return '<div class="player-hand ' + (focused ? 'active ' : '') + (settled ? hand.returned > hand.bet ? 'won' : hand.returned < hand.bet ? 'lost' : '' : '') + '"><div class="hand-title">' + result + (cards.length ? '<span class="total-badge">' + totalText(cards) + '</span>' : '') + '</div><div class="hand blackjack-hand ' + (cards.length > 4 ? 'many-cards' : '') + '" style="--hand-count:' + cards.length + '">' + cards.map((c,j) => cardHTML(c,{animate:view?.newCard === 'p' + i + '-' + j,cardIndex:j})).join('') + '</div><div class="bet-on-table">' + compact(hand.bet) + '</div></div>';
+      }).join('') : '<div class="player-hand"><div class="hand-title">YOUR HAND</div><div class="hand blackjack-hand">' + cardHTML(null,{cardIndex:0}) + cardHTML(null,{cardIndex:1}) + '</div><div class="bet-on-table">' + compact(bet() || 0) + '</div></div>';
       $('player-caption').textContent = !r ? 'Make yourself at home.' : r.hands.length > 1 && !settled ? 'Playing hand ' + (r.activeHand + 1) + ' of ' + r.hands.length : r.insurance.bet ? 'Insurance: ' + compact(r.insurance.bet) + (r.insurance.result ? ' · ' + (r.insurance.result === 'win' ? 'Won' : 'Lost') : '') : settled ? 'Your next hand is waiting' : 'The next move is yours';
       const remaining = r?.shoe?.length ?? state.shoe.length;
       $('shoe-info').textContent = remaining ? '6-deck shoe · ' + remaining + ' cards remaining' : '6-deck shoe · Shuffled and ready';
     }
   }
 
+  const ACTION_KEYS = {hit:'H',stand:'S',double:'D',split:'P',check:'C',fold:'F',play1:'1',play2:'2',play3:'3',play4:'4',decline:'N',insurance:'I'};
+
   function button(action,label,enabled=true,style='',note='') {
-    return '<button class="action-button ' + style + '" data-action="' + action + '"' + (!enabled ? ' disabled' : '') + '>' + label + (note ? '<small>' + note + '</small>' : '') + '</button>';
+    const key = ACTION_KEYS[action];
+    const explanation = {hit:'Take another card.',stand:'Keep your total and end this hand.',double:'Add an equal bet and take exactly one card. Available on your first two cards.',split:'Make two hands from cards of equal value. Requires an equal additional bet.',check:'Continue to the next community cards without a Play bet.',fold:'Give up Ante and Blind. Trips is settled independently.',decline:'Continue without the insurance side bet.',insurance:'Bet half your original wager that the dealer has blackjack.'}[action];
+    return '<button class="action-button ' + style + '" data-action="' + action + '"' + (!enabled ? ' disabled' : '') + (key ? ' aria-keyshortcuts="' + key + '"' : '') + (explanation ? ' title="' + explanation + '"' : '') + '><span class="action-label">' + label + (key ? '<kbd class="action-key" aria-hidden="true">' + key + '</kbd>' : '') + '</span>' + (note ? '<small>' + note + '</small>' : '') + '</button>';
   }
 
   function renderActions() {
     const r = state.round;
-    let title = state.hands ? 'Welcome back to your seat.' : 'Pull up a chair. You’re in good company.';
+    let title = state.hands ? 'Welcome back to the table.' : 'Your table is ready.';
     let detail = ultimate() ? 'Place equal Ante and Blind bets to begin.' : 'Choose your chips and place your bet.';
     let actions = '';
     let resultClass = '';
     if (busy) {
       title = view?.message || 'Dealing your cards…';
-      detail = 'Let the cards do the talking.';
+      detail = ultimate() ? 'Watch the board. Your next decision is coming.' : 'One hand. One decision at a time.';
     } else if (!r || r.phase === 'settled') {
       if (r) {
         const net = cents(r.returned - r.wagered);
-        title = net > 0 ? 'Nicely played. ' + cash(net) + ' is yours.' : net < 0 ? 'The house takes this one. −' + cash(-net) + '.' : 'Even honours. Your chips are back.';
+        title = net > 0 ? 'You win ' + cash(net) + '.' : net < 0 ? 'Round complete. ' + signed(net) + '.' : 'Push. Your chips are back.';
         if (r.game === 'blackjack' && r.hands.length === 1 && r.hands[0].result === 'blackjack') title = 'Blackjack. ' + signed(net) + '.';
         if (r.game === 'ultimate' && r.result === 'fold') title = 'You folded. ' + signed(net) + '.';
         resultClass = net > 0 ? 'won' : net < 0 ? 'lost' : '';
         detail = cash(r.wagered) + ' wagered · ' + cash(r.returned) + ' returned';
         if (ultimate() && !r.qualifies && r.result !== 'fold') detail += ' · Ante pushes';
-        actions += button('details','Details');
+        actions += button('details','Round details');
       }
-      if (!r) detail = ultimate() ? 'Select a chip. Click Ante or Blind to bet; Trips is optional.' : 'Select a chip, then click the betting circle to add it.';
+      if (!r) detail = bet() >= 25 ? ultimate() ? 'Ante ' + compact(bet()) + ' + Blind ' + compact(bet()) + '. Deal when you’re ready.' : 'Your ' + compact(bet()) + ' bet is ready. Deal to begin, or change your chips.' : ultimate() ? 'Select a chip, then tap Ante or Blind. Trips is optional.' : 'Select a chip, then tap your betting circle.';
     } else if (r.phase === 'insurance') {
       title = 'Dealer shows an ace. Insurance?';
       detail = 'A side bet of ' + cash(r.initialBet/2) + ' pays 2:1 if the dealer has blackjack.';
-      actions = button('decline','No thanks') + button('insurance','Insurance',E.blackjackActions(r,state.balance).includes('insurance'),'primary',compact(r.initialBet/2));
+      actions = button('decline','No thanks',true,'primary') + button('insurance','Insurance',E.blackjackActions(r,state.balance).includes('insurance'),'',compact(r.initialBet/2));
     } else if (r.game === 'blackjack') {
       const legal = E.blackjackActions(r,state.balance);
       title = r.hands.length > 1 ? 'Hand ' + (r.activeHand + 1) + '. Your move.' : 'Your move.';
-      detail = 'You have ' + totalText(r.hands[r.activeHand].cards).toLowerCase() + '.';
+      detail = 'You have ' + totalText(r.hands[r.activeHand].cards).toLowerCase() + ' · Dealer shows ' + totalText([r.dealer[0]]).toLowerCase() + '.';
       if (r.insurance.bet && r.insurance.result === 'lose') detail += ' Insurance lost.';
-      actions = button('hit','Hit',legal.includes('hit'),'primary') + button('stand','Stand',legal.includes('stand')) + button('double','Double',legal.includes('double'),'','+' + compact(r.hands[r.activeHand].bet)) + button('split','Split',legal.includes('split'),'','+' + compact(r.hands[r.activeHand].bet));
+      actions = button('hit','Hit',legal.includes('hit'),'primary','Take a card') + button('stand','Stand',legal.includes('stand'),'','Keep your total') + button('double','Double',legal.includes('double'),'','+' + compact(r.hands[r.activeHand].bet)) + button('split','Split',legal.includes('split'),'','+' + compact(r.hands[r.activeHand].bet));
     } else {
       const legal = E.ultimateActions(r,state.balance);
       if (r.phase === 'preflop') {
-        title = 'Two cards. A little possibility.';
+        title = 'Your hole cards. Your first move.';
         detail = 'Raise 3× or 4× your ante, or check to see the flop.';
-        actions = button('check','Check') + button('play3','Play 3×',legal.includes('play3'),'',compact(r.ante*3)) + button('play4','Play 4×',legal.includes('play4'),'primary',compact(r.ante*4));
+        actions = button('check','Check',true,'','See the flop') + button('play3','Play 3×',legal.includes('play3'),'',compact(r.ante*3)) + button('play4','Play 4×',legal.includes('play4'),'primary',compact(r.ante*4));
       } else if (r.phase === 'flop') {
-        title = 'There’s the flop. What do you think?';
+        title = 'The flop is out. Play or check?';
         detail = 'Bet 2× your ante, or check to the turn and river.';
-        actions = button('check','Check') + button('play2','Play 2×',legal.includes('play2'),'primary',compact(r.ante*2));
+        actions = button('check','Check',true,'','See the river') + button('play2','Play 2×',legal.includes('play2'),'primary',compact(r.ante*2));
       } else {
         title = 'All the cards are out. Your call.';
         detail = 'Bet 1× your ante to face the dealer, or fold.';
@@ -295,6 +337,36 @@
     if (focusedAction) {
       const focus = $('game-actions').querySelector('[data-action="' + focusedAction + '"]:not(:disabled)') || $('game-actions').querySelector('button:not(:disabled)');
       focus?.focus({preventScroll:true});
+    }
+  }
+
+  function renderRoundProgress() {
+    const r = state.round;
+    const settled = finalVisible();
+    const steps = ultimate() ? ['Bet','Hole cards','Flop','River','Showdown'] : ['Bet','Deal','Your turn','Dealer','Result'];
+    let current = 0;
+    if (r) {
+      if (settled) current = 4;
+      else if (ultimate()) {
+        const count = visibleBoardCount();
+        current = view?.dealerReveal ? 4 : count >= 5 ? 3 : count >= 3 ? 2 : 1;
+      } else current = busy && (view?.playerCounts?.[0] ?? 2) < 2 ? 1 : r.phase === 'settled' ? 3 : 2;
+    }
+    const tracker = $('round-stage');
+    if (tracker) {
+      tracker.innerHTML = steps.map((label,i) => '<span class="stage-step' + (i === current ? ' is-current' : i < current ? ' is-complete' : '') + '"' + (i === current ? ' aria-current="step"' : '') + '><span class="stage-number" aria-hidden="true">' + (i < current ? '✓' : i + 1) + '</span>' + label + '</span>').join('');
+      tracker.setAttribute('aria-label','Hand progress: ' + steps[current]);
+    }
+    const result = $('table-result');
+    if (result) {
+      result.hidden = !settled;
+      if (settled) {
+        const net = cents(r.returned - r.wagered);
+        const natural = !ultimate() && r.hands.length === 1 && r.hands[0].result === 'blackjack';
+        const label = natural ? 'BLACKJACK!' : r.result === 'fold' ? 'FOLDED' : net > 0 ? 'YOU WIN' : net < 0 ? 'ROUND COMPLETE' : 'PUSH';
+        result.className = 'table-result ' + (net > 0 ? 'win' : net < 0 ? 'loss' : 'push');
+        result.innerHTML = '<span class="result-label">' + label + '</span><strong class="result-value">' + signed(net) + '</strong>';
+      } else result.innerHTML = '';
     }
   }
 
@@ -321,6 +393,7 @@
     renderTable();
     renderActions();
     renderWagers();
+    renderRoundProgress();
     renderChipSelection();
   }
 
@@ -453,6 +526,7 @@
 
   function focusActions() {
     if (!$('info-dialog').open && !$('bet-dialog').open) {
+      if (!active() && !$('deal-btn').disabled) { $('deal-btn').focus({preventScroll:true}); return; }
       const target = $('game-actions').querySelector('.primary:not(:disabled),button:not(:disabled)');
       if (target) target.focus({preventScroll:true});
       else if (!$('deal-btn').disabled) $('deal-btn').focus({preventScroll:true});
@@ -621,7 +695,14 @@
     let title = '';
     let kicker = 'THE HOUSE RULES';
     let html = '';
-    if (type === 'rules') {
+    if (type === 'guide') {
+      title = ultimate() ? 'Your first Hold’em hand' : 'Your first blackjack hand';
+      kicker = 'LEARN AS YOU PLAY';
+      html = ultimate()
+        ? '<p class="rules-intro">Make a better five-card poker hand than the dealer. Your two cards and the five cards in the middle all count.</p><ol class="quick-guide-steps"><li><b>Place your opening bets.</b> Ante and Blind match automatically. A $25 Ante means $50 on the table; keep chips for your Play bet. Trips is an optional side bet.</li><li><b>Choose when to Play.</b> With your two cards, bet 3× or 4× your Ante, or Check to see three community cards. At the flop, Play 2× or Check again. With all five cards visible, Play 1× or Fold.</li><li><b>Watch the showdown.</b> You make one Play bet per hand. The remaining cards reveal automatically. Your best five cards glow, and Round details explains each payout.</li></ol><h3>At a glance</h3><p><b>Check</b> keeps you in without a Play bet yet. <b>Fold</b> gives up Ante and Blind; Trips still settles on your cards. The dealer needs a pair to qualify for the Ante.</p><p class="dialog-note">Keyboard: <kbd>C</kbd> Check · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> Play the matching multiple · <kbd>F</kbd> Fold · <kbd>Enter</kbd> Deal. Only available moves respond.</p>'
+        : '<p class="rules-intro">Get closer to 21 than the dealer without going over. Number cards count as shown, face cards count as 10, and an ace counts as 1 or 11.</p><ol class="quick-guide-steps"><li><b>Make your bet.</b> Your starting $25 bet is already on the table. Press Deal, or choose a chip and tap the betting circle to add it.</li><li><b>Choose your move.</b> Hit takes another card. Stand keeps your total. Double adds an equal bet and gives you one last card. Split separates matching card values into two hands with an equal extra bet.</li><li><b>See who wins.</b> The dealer plays automatically after your turn. A win pays 1:1, a natural blackjack pays 3:2, and a tie returns your bet. Press Deal again to keep playing.</li></ol><h3>A little table help</h3><p>Your total appears above your cards. “Soft” means your ace can still change from 11 to 1. The highlighted hand is yours to play when you split. Unavailable moves are dimmed.</p><p class="dialog-note">Keyboard: <kbd>H</kbd> Hit · <kbd>S</kbd> Stand · <kbd>D</kbd> Double · <kbd>P</kbd> Split · <kbd>N</kbd> No insurance · <kbd>I</kbd> Insurance · <kbd>Enter</kbd> Deal.</p>';
+      html += '<p class="dialog-note">Select chips, then tap a betting circle to add them. Clear removes opening bets; Undo reverses your last change. Use Edit amount to enter a precise wager. Everything is played with free practice chips.</p>';
+    } else if (type === 'rules') {
       title = ultimate() ? 'Ultimate Texas Hold’em' : 'Blackjack';
       html = ultimate() ? pokerRules : blackjackRules;
     } else if (type === 'history') {
@@ -687,7 +768,7 @@
     $(id).addEventListener('input',() => {
       if (locked()) return;
       if (!betError()) { undoBets.push({bet:state.bets[state.game],trips:state.bets.trips}); if (undoBets.length>30) undoBets.shift(); state.round = null; state.bets[state.game] = bet(); state.bets.trips = Number($('trips-input').value) || 0; save(); }
-      updateBetting(); renderTable(); renderActions(); renderWagers();
+      updateBetting(); renderTable(); renderActions(); renderWagers(); renderRoundProgress();
     });
   }
   document.addEventListener('contextmenu',event => {
@@ -726,12 +807,14 @@
       void document.exitFullscreen().catch(()=>{});
       return;
     }
-    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || busy || $('info-dialog').open || $('bet-dialog').open ||
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || busy || $('info-dialog').open || $('bet-dialog').open || document.activeElement?.isContentEditable ||
         ['INPUT','TEXTAREA','SELECT','A'].includes(document.activeElement?.tagName)) return;
-    if (event.key === 'Enter' && !active() && document.activeElement?.tagName !== 'BUTTON') { event.preventDefault(); void deal(); return; }
-    if (ultimate()) return;
-    const action = {h:'hit',s:'stand',d:'double',p:'split'}[event.key.toLowerCase()];
-    if (action && E.blackjackActions(state.round,state.balance).includes(action)) { event.preventDefault(); void act(action); }
+    if (event.key === 'Enter' && !active() && (document.activeElement?.tagName !== 'BUTTON' || document.activeElement?.id === 'deal-btn')) { event.preventDefault(); void deal(); return; }
+    const action = ultimate()
+      ? {c:'check',f:'fold',1:'play1',2:'play2',3:'play3',4:'play4'}[event.key.toLowerCase()]
+      : {h:'hit',s:'stand',d:'double',p:'split',n:'decline',i:'insurance'}[event.key.toLowerCase()];
+    const legal = ultimate() ? E.ultimateActions(state.round,state.balance) : E.blackjackActions(state.round,state.balance);
+    if (action && legal.includes(action)) { event.preventDefault(); void act(action); }
   });
 
   syncInputs();
