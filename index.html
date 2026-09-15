@@ -3,27 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101713">
+  <meta name="theme-color" content="#101a19">
   <meta name="description" content="Your own casino table. Play blackjack and Ultimate Texas Hold’em with virtual chips.">
   <title>Club Royale — Take your seat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="atmosphere.css">
   <script src="game-engine.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
   <main class="casino-app" id="casino-app">
     <header class="topbar">
-      <a class="brand" href="./index.html" aria-label="Club Royale home"><span class="brand-mark" aria-hidden="true">♠</span><span>CLUB <b>ROYALE</b><small>YOUR PRIVATE TABLE</small></span></a>
+      <a class="brand" href="./index.html" aria-label="Club Royale home"><span class="brand-mark" aria-hidden="true">♠</span><span>CLUB <b>ROYALE</b><small>A SEAT AT THE GOOD TABLE</small></span></a>
       <nav class="game-tabs" aria-label="Choose your game">
         <button class="game-tab active" id="tab-blackjack" data-game="blackjack" aria-pressed="true"><span aria-hidden="true">♠</span> Blackjack</button>
         <button class="game-tab" id="tab-ultimate" data-game="ultimate" aria-pressed="false"><span aria-hidden="true">♦</span> <span class="uth-long">Ultimate Texas Hold’em</span><span class="uth-short">Ultimate Hold’em</span></button>
       </nav>
       <div class="header-tools">
-        <div class="wallet"><div><span class="eyebrow">PLAY MONEY</span><strong id="balance">$10,000.00</strong></div><button id="bankroll-btn" class="wallet-add" aria-label="Add free chips" title="Add free chips">+</button></div>
+        <div class="wallet"><span class="wallet-symbol" aria-hidden="true">◈</span><div><span class="eyebrow">YOUR CHIPS <span class="free-label">FREE PLAY</span></span><strong id="balance">$10,000.00</strong></div><button id="bankroll-btn" class="wallet-add" aria-label="Add free chips" title="Add free chips">+</button></div>
         <button id="fullscreen-btn" class="fullscreen-button" aria-label="Enter fullscreen" aria-pressed="false" title="Enter fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>Fullscreen</span></button>
       </div>
     </header>
@@ -31,17 +30,18 @@
     <section class="table-shell" aria-label="Interactive casino table">
       <div id="table" class="table blackjack-table">
         <div class="felt-grain" aria-hidden="true"></div><div class="felt-line" aria-hidden="true"></div>
-        <div class="table-topline"><span><i class="live-dot"></i> <span id="table-name">BLACKJACK</span> <small id="table-number">TABLE 01</small></span><div class="table-tools"><button class="text-button" data-open="history" title="Session history"><span aria-hidden="true">↺</span> History</button><button class="text-button" data-open="rules">Table rules</button><button id="sound-btn" class="icon-button" aria-label="Turn sound on" aria-pressed="false" title="Turn sound on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path id="sound-waves" d="m16 9 6 6m0-6-6 6"/></svg></button></div></div>
+        <div class="table-topline"><span><i class="live-dot"></i> <span id="table-name">BLACKJACK</span> <small id="table-number">TABLE 01</small></span><div class="table-tools"><button class="text-button" data-open="history" title="Session history"><span aria-hidden="true">↺</span> History</button><button class="text-button" data-open="rules">Rules &amp; payouts</button><button id="sound-btn" class="icon-button" aria-label="Turn sound on" aria-pressed="false" title="Turn sound on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path id="sound-waves" d="m16 9 6 6m0-6-6 6"/></svg></button></div></div>
+        <div id="round-stage" class="round-stage" aria-label="Hand progress"></div>
         <div class="shoe-prop" aria-hidden="true"><div class="shoe-card">♠</div></div>
         <div class="chip-rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="table-seal" aria-hidden="true"><span>♠</span><b>CLUB ROYALE</b><small>THE HOUSE OF GOOD COMPANY</small></div>
-        <div class="lounge-welcome"><span>✦ THE ROYALE ROOM ✦</span><strong>Stay a little.</strong><small>Good company. Great cards.</small></div>
+        <aside class="table-note"><span class="table-note-mark" aria-hidden="true">♠</span><span class="eyebrow">THE ROYALE ROOM</span><h1>Your table.<br>Your kind of night.</h1><p>A fresh shuffle.<br>A little possibility.</p><button id="quick-guide" class="guide-button" data-open="guide"><span aria-hidden="true">?</span> How to play <span aria-hidden="true">↗</span></button></aside>
         <section class="dealer-zone" aria-label="Dealer hand"><div class="seat-label">DEALER <span id="dealer-total" class="total-badge" hidden></span></div><div class="hand" id="dealer-hand"></div><div class="hand-caption" id="dealer-caption">Your seat is ready</div></section>
         <div class="felt-brand" id="felt-brand"><div class="felt-brand-name">BLACKJACK</div><div class="felt-payout">BLACKJACK PAYS 3 TO 2</div><div class="felt-rule">DEALER HITS SOFT 17 <span>◆</span> INSURANCE PAYS 2 TO 1</div></div>
         <section id="community-zone" class="community-zone" aria-label="Community cards" hidden><div class="community-label"><span>FLOP</span><span>TURN</span><span>RIVER</span></div><div class="community-hand" id="community-hand"></div><div id="street-caption" class="hand-caption">Five cards. One best hand.</div></section>
         <section class="player-zone" aria-label="Your hands"><div id="player-hands" class="player-hands"></div><div class="player-seat"><span class="avatar" aria-hidden="true">♠</span><span>YOUR SEAT<small id="player-caption">Make yourself at home.</small></span></div></section>
         <div id="betting-spots" class="betting-spots" aria-label="Place chips on the betting circles"></div>
         <div id="table-paytable" class="felt-paytable" aria-label="Payouts"></div>
+        <div id="table-result" class="table-result" role="status" aria-live="polite" hidden></div>
         <div class="table-bottom"><span id="shoe-info">6-deck shoe · Shuffled and ready</span><span id="felt-limit">MIN $25 · MAX $2,000</span><span class="table-bottom-right">PLAY FOR THE LOVE OF THE GAME</span></div>
       </div>
     </section>
@@ -57,14 +57,14 @@
             <button class="chip chip-hundred" data-chip="100" draggable="true" aria-label="Select 100 dollar chip" aria-pressed="false"><span>$100</span></button>
             <button class="chip chip-fivehundred" data-chip="500" draggable="true" aria-label="Select 500 dollar chip" aria-pressed="false"><span>$500</span></button>
           </div>
-          <div class="bet-tools"><button data-action="undo" title="Undo the last chip placement" aria-label="Undo last chip">↶ <span>Undo</span></button><button data-action="clear" title="Remove all opening bets">× <span>Clear</span></button><button data-action="repeat" title="Restore your last opening bets">↻ <span>Rebet</span></button></div>
+          <div class="bet-tools"><button data-action="undo" title="Undo the last chip placement" aria-label="Undo last chip">↶ <span>Undo</span></button><button data-action="clear" title="Remove all opening bets">× <span>Clear</span></button><button data-action="repeat" title="Restore your last opening bets">↻ <span>Rebet</span></button><button data-adjust="twice" title="Double your opening bet">2× <span>Double bet</span></button></div>
         </div></div>
         <div class="wager-display"><span id="wager-label">ON THE TABLE</span><strong id="wager-total">$25.00</strong><button class="text-button" data-action="bet">Edit amount <span aria-hidden="true">↗</span></button></div>
         <div class="actions-wrap"><div class="game-actions" id="game-actions"></div><button class="primary-button deal-button" id="deal-btn">Deal me in <span aria-hidden="true">→</span></button></div>
       </div>
       <p class="bet-error" id="bet-error" role="status"></p>
     </section>
-    <footer><span>VIRTUAL CHIPS. REAL TABLE RULES.</span><span id="fullscreen-hint">Your seat. Your pace.</span><span>CLUB ROYALE <span aria-hidden="true">♠</span></span></footer>
+    <footer><span><i class="live-dot"></i> JUST FOR FUN. ALWAYS FREE.</span><span id="fullscreen-hint">Your seat. Your pace.</span><span>MADE FOR A GOOD HAND <span aria-hidden="true">♠</span></span></footer>
   </main>
 
   <dialog id="bet-dialog" aria-labelledby="betting-title">
