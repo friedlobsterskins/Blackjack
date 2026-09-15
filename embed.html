@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1714">
+  <meta name="description" content="Play Club Royale as an embedded JavaScript game. Blackjack and Ultimate Texas Hold’em, with free virtual chips.">
+  <title>Club Royale — Embedded game</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #e9eee8; background: #0d1714; }
+    body { margin: 0; height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .embed-bar { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 7px max(16px, env(safe-area-inset-right)) 7px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid #ffffff14; }
+    .embed-brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 11px; letter-spacing: .14em; font-weight: 750; }
+    .embed-brand span { color: #d7b679; font-size: 19px; }
+    .embed-brand small { color: #8a9f93; font-size: 10px; font-weight: 400; letter-spacing: .03em; }
+    nav { display: flex; align-items: center; gap: 16px; }
+    button, a { color: #c7d3ca; font: inherit; font-size: 11px; text-decoration: none; }
+    button { padding: 5px 0; border: 0; background: transparent; cursor: pointer; }
+    button:hover, a:hover { color: #edcb8f; }
+    button:focus-visible, a:focus-visible { outline: 2px solid #d7b679; outline-offset: 4px; border-radius: 2px; }
+    main { min-width: 0; min-height: 0; }
+    iframe { display: block; width: 100%; height: 100%; border: 0; }
+    dialog { width: min(560px, calc(100vw - 32px)); padding: 28px; color: #e9eee8; background: #17251f; border: 1px solid #4a594b; border-radius: 16px; box-shadow: 0 20px 80px #0008; }
+    dialog::backdrop { background: #000b; backdrop-filter: blur(4px); }
+    .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: 21px; letter-spacing: -.025em; }
+    .close-button { font-size: 23px; padding: 2px 8px; }
+    p { color: #b6c2b8; font-size: 14px; line-height: 1.6; }
+    pre { padding: 16px; border: 1px solid #ffffff14; border-radius: 8px; overflow-x: auto; background: #0d1714; color: #dfc38f; font-size: 12px; line-height: 1.6; tab-size: 2; }
+    .hint { margin-bottom: 0; font-size: 12px; }
+    @media (max-width: 580px) { .embed-brand small { display: none; } nav { gap: 12px; } .embed-bar { gap: 8px; padding-top: 8px; padding-bottom: 8px; } }
+  </style>
+</head>
+<body>
+  <header class="embed-bar">
+    <div class="embed-brand"><span aria-hidden="true">♠</span> CLUB ROYALE <small>Embedded game</small></div>
+    <nav aria-label="Game embedding options"><button type="button" id="embed-code-button" aria-haspopup="dialog">Embed code</button><a href="./index.html" target="_blank" rel="noopener">Open game ↗</a></nav>
+  </header>
+  <main aria-label="Club Royale game">
+    <iframe src="./index.html" title="Club Royale — Blackjack and Ultimate Texas Hold’em" allow="fullscreen" allowfullscreen></iframe>
+  </main>
+  <dialog id="embed-code" aria-labelledby="embed-title">
+    <div class="dialog-heading"><h1 id="embed-title">Your table, anywhere.</h1><form method="dialog"><button class="close-button" aria-label="Close embed code">×</button></form></div>
+    <p>Host the game files together, then add this to your page. Replace the address with your hosted game URL.</p>
+    <pre><code>&lt;iframe
+  src="https://your-site.example/club-royale/index.html"
+  title="Club Royale casino game"
+  style="width:100%;height:100dvh;border:0"
+  allow="fullscreen"
+  allowfullscreen&gt;
+&lt;/iframe&gt;</code></pre>
+    <p class="hint">The game adapts to its frame. Players can use the game’s Fullscreen button to fill the display.</p>
+  </dialog>
+  <script>
+    document.getElementById('embed-code-button').addEventListener('click', () => {
+      document.getElementById('embed-code').showModal();
+    });
+  </script>
+</body>
+</html>
