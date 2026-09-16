@@ -199,14 +199,15 @@
     if (['J','Q','K'].includes(card.rank)) classes.push('face-card');
     if (card.rank === 'A') classes.push('ace-card');
     if (options.best) classes.push('best-card');
+    if (options.house) classes.push('house-card');
     const corner = '<span>' + escape(card.rank) + '</span><small>' + SUITS[card.suit] + '</small>';
     const center = PIP_LAYOUTS[card.rank]
       ? '<div class="card-pips" aria-hidden="true">' + PIP_LAYOUTS[card.rank].map(([x,y]) => '<span class="pip' + (y > 50 ? ' inverted' : '') + '" style="left:' + x + '%;top:' + y + '%">' + SUITS[card.suit] + '</span>').join('') + '</div>'
       : '<div class="card-center" aria-hidden="true">' + courtHTML(card) + '</div>';
-    return '<div class="' + classes.join(' ') + '"' + cardStyle + ' role="img" aria-label="' + escape(card.rank + ' of ' + SUIT_NAMES[card.suit]) + '"><div class="card-corner" aria-hidden="true">' + corner + '</div>' + center + '<div class="card-corner bottom" aria-hidden="true">' + corner + '</div></div>';
+    return '<div class="' + classes.join(' ') + '"' + cardStyle + ' role="img" aria-label="' + escape(card.rank + ' of ' + SUIT_NAMES[card.suit] + (options.house ? ', part of the house qualifying hand' : '')) + '"><div class="card-corner" aria-hidden="true">' + corner + '</div>' + center + '<div class="card-corner bottom" aria-hidden="true">' + corner + '</div></div>';
   }
 
-  function finalVisible() { return state.round?.phase === 'settled' && !busy; }
+  function finalVisible() { return state.round?.phase === 'settled' && (!busy || view?.resultReveal); }
   function visibleBoardCount() {
     if (!state.round || !ultimate()) return 0;
     return view?.boardCount ?? ({ preflop: 0, flop: 3, river: 5, settled: 5 }[state.round.phase] || 0);
@@ -216,6 +217,14 @@
   }
   function bestCard(card) {
     return finalVisible() && ultimate() && state.round.playerRank.cards.some(c => c.rank === card.rank && c.suit === card.suit);
+  }
+  function houseCard(card) {
+    const r = state.round;
+    if (!ultimate() || !r?.qualifies || !(view?.dealerReveal || finalVisible())) return false;
+    const rank = r.dealerRank;
+    if (!rank.cards.some(c => c.rank === card.rank && c.suit === card.suit)) return false;
+    // For pairs, trips and quads, lift the matching ranks, leaving kickers flat.
+    return ![1,2,3,7].includes(rank.category) || rank.cards.filter(c => c.rank === card.rank).length > 1;
   }
   function totalText(cards) {
     const value = E.blackjackValue(cards);
@@ -241,16 +250,16 @@
     const visibleDealer = r ? r.dealer.slice(0, dealerCount) : [];
     $('dealer-hand').classList.toggle('blackjack-hand',!ultimate());
     $('dealer-hand').classList.toggle('many-cards', dealerCount > 4);
-    $('dealer-hand').innerHTML = r ? visibleDealer.map((c,i) => cardHTML(c, { hidden: !reveal && (ultimate() || i > 0), animate: view?.newCard === 'd' + i, cardIndex:ultimate() ? undefined : i })).join('') : cardHTML(null,{cardIndex:ultimate() ? undefined : 0}) + cardHTML(null,{cardIndex:ultimate() ? undefined : 1});
+    $('dealer-hand').innerHTML = r ? visibleDealer.map((c,i) => cardHTML(c, { hidden: !reveal && (ultimate() || i > 0), house:houseCard(c), animate: view?.newCard === 'd' + i, cardIndex:ultimate() ? undefined : i })).join('') : cardHTML(null,{cardIndex:ultimate() ? undefined : 0}) + cardHTML(null,{cardIndex:ultimate() ? undefined : 1});
     const shownDealer = !ultimate() ? visibleDealer.filter((_,i) => reveal || i === 0) : [];
     $('dealer-total').hidden = !shownDealer.length || ultimate();
     $('dealer-total').textContent = shownDealer.length ? totalText(shownDealer) : '';
-    $('dealer-caption').textContent = !r ? 'Your next hand is waiting' : ultimate() ? (settled ? r.dealerRank.name + (r.qualifies ? ' · Dealer qualifies' : ' · Dealer does not qualify') : 'Dealer needs a pair to qualify') : settled ? (E.isBlackjack(r.dealer) ? 'Blackjack' : E.blackjackValue(r.dealer).total > 21 ? 'Dealer busts' : 'Dealer total: ' + totalText(r.dealer)) : reveal ? 'Dealer is playing' : 'Dealer hits soft 17';
+    $('dealer-caption').textContent = !r ? 'Your next hand is waiting' : ultimate() ? (reveal ? r.dealerRank.name + (r.qualifies ? ' · House qualifies' : ' · House does not qualify') : 'Dealer needs a pair to qualify') : settled ? (E.isBlackjack(r.dealer) ? 'Blackjack' : E.blackjackValue(r.dealer).total > 21 ? 'Dealer busts' : 'Dealer total: ' + totalText(r.dealer)) : reveal ? 'Dealer is playing' : 'Dealer hits soft 17';
 
     if (ultimate()) {
       const count = visibleBoardCount();
-      $('community-hand').innerHTML = Array.from({length:5}, (_,i) => cardHTML(r && i < count ? r.board[i] : null, { best: r && i < count && bestCard(r.board[i]), animate: view?.newCard === 'b' + i })).join('');
-      $('street-caption').textContent = !r ? 'Five cards. One best hand.' : count === 0 ? 'Your two cards. Your first decision.' : count === 3 ? 'The flop is on the table' : settled ? 'Your best five cards are highlighted' : 'The turn and river are on the table';
+      $('community-hand').innerHTML = Array.from({length:5}, (_,i) => cardHTML(r && i < count ? r.board[i] : null, { best: r && i < count && bestCard(r.board[i]), house: r && i < count && houseCard(r.board[i]), animate: view?.newCard === 'b' + i })).join('');
+      $('street-caption').textContent = !r ? 'Five cards. One best hand.' : count === 0 ? 'Your two cards. Your first decision.' : count === 3 ? 'The flop is on the table' : settled ? r.qualifies ? 'Gold: your best five · Blue + raised: house hand' : 'Your best five cards are highlighted' : 'The turn and river are on the table';
       const cards = r ? playerCards(0, r.player) : [];
       let rank = '';
       if (r && count >= 3) rank = E.evaluatePoker([...r.player, ...r.board.slice(0,count)]).name;
@@ -449,6 +458,15 @@
       await delay(450);
     }
     if (r.returned > r.wagered) sound('win');
+    if (ultimate()) {
+      view.resultReveal = true;
+      view.payout = true;
+      view.clearedZones = [];
+      view.newCard = '';
+      view.message = 'Settling your chips…';
+      render();
+      await animatePokerPayout(r);
+    }
   }
 
   async function deal() {
@@ -593,7 +611,7 @@
       const amounts = { ante:r?.ante ?? bet(), blind:r?.blind ?? bet(), trips:r?.trips ?? trips(), play:played };
       const result = name => r?.breakdown?.find(item => item.label.toLowerCase() === name)?.result;
       $('betting-spots').innerHTML = ['trips','ante','blind','play'].map(zone => wagerCircle(zone,zone.toUpperCase(),amounts[zone],{
-        className:'poker-spot spot-' + zone,
+        className:'poker-spot spot-' + zone + (finalVisible() && (!view?.payout || view.clearedZones.includes(zone)) ? ' chips-cleared' : ''),
         result:result(zone),
         enabled:zone === 'play' ? !busy && active() && !played && E.ultimateActions(r,state.balance).some(action=>action.startsWith('play')) : !locked(),
         hint:zone === 'play' ? 'Make your Play bet using the available raise options.' : zone === 'trips' ? 'Add a Trips side bet. It pays independently of the dealer.' : 'Ante and Blind always match. Each click adds a chip to both.'
@@ -630,6 +648,56 @@
     const animation = chip.animate([{transform:'translate(0,0) rotate(0)'},{transform:'translate('+dx+'px,'+dy+'px) rotate(25deg)'}],{duration:320,easing:'cubic-bezier(.2,.7,.3,1)'});
     animation.onfinish = () => chip.remove();
     animation.oncancel = () => chip.remove();
+  }
+
+  async function animatePokerPayout(round) {
+    if (reducedMotion.matches) return;
+    const layer = document.createElement('div');
+    layer.className = 'payout-layer';
+    layer.setAttribute('aria-hidden','true');
+    // Keep the overlay inside the app so it is also visible in fullscreen.
+    (document.fullscreenElement || $('casino-app')).append(layer);
+    const center = element => {
+      const rect = element.getBoundingClientRect();
+      return { x:rect.left + rect.width/2, y:rect.top + rect.height/2 };
+    };
+    const house = center($('dealer-hand'));
+    const player = center(document.querySelector('.chip-selector'));
+    async function travel(amount, from, to, wait, kind) {
+      const stack = document.createElement('span');
+      stack.className = 'payout-stack payout-' + kind;
+      stack.style.left = from.x + 'px';
+      stack.style.top = from.y + 'px';
+      stack.innerHTML = chipStack(amount);
+      layer.append(stack);
+      const dx = to.x-from.x, dy = to.y-from.y;
+      const animation = stack.animate([
+        {transform:'translate(-50%,-50%) scale(.8)',opacity:0},
+        {transform:'translate(calc(-50% + ' + dx*.35 + 'px),calc(-50% + ' + (dy*.35-24) + 'px)) rotate(-8deg) scale(1.08)',opacity:1,offset:.4},
+        {transform:'translate(calc(-50% + ' + dx + 'px),calc(-50% + ' + dy + 'px)) rotate(8deg) scale(.8)',opacity:kind === 'win' ? 1 : 0}
+      ],{duration:kind === 'win' ? 420 : 580,delay:wait,easing:'cubic-bezier(.22,.7,.3,1)',fill:'both'});
+      try { await animation.finished; } catch { /* Cancelled visual effects do not affect settlement. */ }
+      finally { stack.remove(); }
+    }
+    try {
+      await Promise.all(round.breakdown.filter(line => line.bet > 0).map(async (line,index) => {
+        const zone = document.querySelector('[data-zone="' + line.label.toLowerCase() + '"]');
+        if (!zone) return;
+        const spot = center(zone);
+        const clearChips = () => {
+          view.clearedZones.push(line.label.toLowerCase());
+          document.querySelector('[data-zone="' + line.label.toLowerCase() + '"]')?.classList.add('chips-cleared');
+        };
+        if (line.returned > line.bet) {
+          await travel(cents(line.returned-line.bet),house,spot,index*80,'win');
+          clearChips();
+          await travel(line.returned,spot,player,70,'return');
+        } else {
+          clearChips();
+          await travel(line.bet,spot,line.returned ? player : house,index*80,line.returned ? 'return' : 'loss');
+        }
+      }));
+    } finally { layer.remove(); }
   }
 
   function placeChip(zone, remove = false) {
