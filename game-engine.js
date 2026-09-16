@@ -115,7 +115,16 @@
   }
 
   function advanceBlackjack(round) {
-    while (round.activeHand < round.hands.length && round.hands[round.activeHand].done) round.activeHand++;
+    while (round.activeHand < round.hands.length) {
+      const hand = round.hands[round.activeHand];
+      // Complete each split hand before dealing into the next position.
+      if (hand.cards.length === 1) {
+        hand.cards.push(draw(round.shoe));
+        hand.done = hand.splitAces || blackjackValue(hand.cards).total === 21;
+      }
+      if (!hand.done) break;
+      round.activeHand++;
+    }
     if (round.activeHand >= round.hands.length) {
       round.activeHand = Math.max(0, round.hands.length - 1);
       settleBlackjack(round);
@@ -149,10 +158,8 @@
     } else if (action === 'split') {
       cost = hand.bet;
       const aces = hand.cards[0].rank === 'A';
-      const left = newHand([hand.cards[0], draw(round.shoe)], hand.bet, true, aces);
-      const right = newHand([hand.cards[1], draw(round.shoe)], hand.bet, true, aces);
-      left.done = aces || blackjackValue(left.cards).total === 21;
-      right.done = aces || blackjackValue(right.cards).total === 21;
+      const left = newHand([hand.cards[0]], hand.bet, true, aces);
+      const right = newHand([hand.cards[1]], hand.bet, true, aces);
       round.hands.splice(round.activeHand, 1, left, right);
     }
     round.wagered = money(round.wagered + cost);
@@ -260,6 +267,21 @@
     return compareRank(Array.isArray(left) ? evaluatePoker(left) : left, Array.isArray(right) ? evaluatePoker(right) : right);
   }
 
+  // Evaluate only exposed cards. A board pair already qualifies the house;
+  // unseen hole cards must never influence this preview.
+  function visiblePokerHand(cards) {
+    if (cards.length >= 5) {
+      const rank = evaluatePoker(cards);
+      return { ...rank, cards: rank.category === 0 ? [] : [1,2,3,7].includes(rank.category)
+        ? rank.cards.filter(card => rank.cards.filter(c => c.rank === card.rank).length > 1)
+        : rank.cards };
+    }
+    const groups = RANKS.slice().reverse().map(rank => cards.filter(card => card.rank === rank))
+      .filter(group => group.length > 1).sort((a,b) => b.length-a.length);
+    const category = !groups.length ? 0 : groups[0].length === 4 ? 7 : groups[0].length === 3 ? 3 : groups.length > 1 ? 2 : 1;
+    return { category, name: {0:'High Card',1:'One Pair',2:'Two Pair',3:'Three of a Kind',7:'Four of a Kind'}[category], cards:groups.flat() };
+  }
+
   function createUltimate(ante, trips = 0, deck = makeDeck()) {
     requireBet(ante);
     requireBet(trips, true);
@@ -337,5 +359,5 @@
   }
 
   return { makeDeck, blackjackValue, isBlackjack, createBlackjack, blackjackActions, actBlackjack,
-    evaluatePoker, comparePoker, createUltimate, ultimateActions, actUltimate };
+    evaluatePoker, visiblePokerHand, comparePoker, createUltimate, ultimateActions, actUltimate };
 });
