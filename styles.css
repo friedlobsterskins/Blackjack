@@ -83,3 +83,59 @@ dialog{width:min(520px,calc(100% - 28px));max-height:calc(100dvh - 36px);overflo
 @media(max-width:650px){.ultimate-table .table-result .result-value{font-size:clamp(10px,3.1cqw,14px);white-space:nowrap}}
 /* Fit hit cards inside their own split position, preserving an upright cascade. */
 .blackjack-table .split-hands .player-hand .hand .card+.card{margin-left:min(calc(var(--card-w)*-.44),calc((100% - var(--card-w))/max(1,var(--hand-count,2) - 1) - var(--card-w)))}
+
+/* Show the house's made hand without losing the player's gold highlights. */
+.ultimate-table .card.house-card{
+  transform:translateY(calc(-1 * clamp(4px,1.2cqh,9px)));
+  box-shadow:0 0 0 2px #93dce9,0 6px 18px #071e2499;
+  animation:house-card-rise .38s cubic-bezier(.2,.8,.3,1) both;
+}
+.ultimate-table .card.house-card.best-card{box-shadow:0 0 0 2px #f8d892,0 0 0 4px #93dce9,0 6px 18px #071e2499}
+@keyframes house-card-rise{from{transform:translateY(0)}to{transform:translateY(calc(-1 * clamp(4px,1.2cqh,9px)))}}
+.payout-layer{position:fixed;inset:0;z-index:100;pointer-events:none;overflow:hidden}
+.payout-stack{position:absolute;width:80px;height:42px;will-change:transform,opacity}
+.payout-stack .coin-pile{--coin-size:32px}
+.payout-stack .table-chip{border-width:3px}
+.payout-stack .table-chip>span{font-size:10px}
+.payout-win{filter:drop-shadow(0 0 9px #f6d27788)}
+.chips-cleared .coin-group{visibility:hidden}
+
+/* Readable table labels and decision text, including compact screens. */
+.casino-app:has(.ultimate-table) .round-message strong{font-size:clamp(12px,1.1vw,15px)}
+.casino-app:has(.ultimate-table) .round-message small{font-size:clamp(11px,1vw,13px);line-height:1.4}
+.casino-app:has(.ultimate-table) .action-button small{font-size:11px}
+.casino-app:has(.ultimate-table) .wager-display>span,
+.casino-app:has(.ultimate-table) .wager-display .text-button{font-size:10px}
+.casino-app:has(.ultimate-table) .tray-caption{font-size:11px}
+.casino-app:has(.ultimate-table) .tray-caption>span:last-child{font-size:10px}
+.casino-app:has(.ultimate-table) .bet-tools button span{font-size:10px}
+.ultimate-table .felt-paytable{font-size:11px;color:#d0d9bd}
+.ultimate-table .felt-paytable table{line-height:1.6}
+.ultimate-table .felt-paytable th,.ultimate-table .felt-paytable h3{font-size:10px;color:#e3d6ac}
+.ultimate-table .felt-paytable p{font-size:9px;line-height:1.4;margin-top:8px;letter-spacing:.2px;color:#bdcead}
+.ultimate-table .hand-caption,.ultimate-table #dealer-caption{font-size:clamp(10px,2cqh,12px);color:#d2dfca}
+.ultimate-table #dealer-caption{margin-top:3px}
+.ultimate-table .seat-label,.ultimate-table .hand-title{font-size:clamp(10px,2.1cqh,13px);letter-spacing:1px}
+.ultimate-table .community-label{font-size:10px;letter-spacing:1px;margin-bottom:10px}
+.ultimate-table .zone-label{font-size:clamp(10px,2cqh,12px);letter-spacing:1px;top:-17px}
+.ultimate-table .zone-value{font-size:clamp(10px,2cqh,12px)}
+.ultimate-table .table-chip>span{font-size:clamp(9px,1.8cqh,12px)}
+.ultimate-table .table-tools .text-button{font-size:11px}
+.ultimate-table .round-stage{font-size:10px;letter-spacing:.5px}
+@media(max-width:650px){
+  .casino-app:has(.ultimate-table) .action-button,.casino-app:has(.ultimate-table) .primary-button{font-size:12px}
+  .casino-app:has(.ultimate-table) .round-message>div{display:block}
+  .ultimate-table .round-stage{font-size:9px;gap:6px;top:40px}
+  .ultimate-table #dealer-caption{position:absolute;right:calc(100% + 10px);top:20px;width:clamp(86px,26cqw,106px);margin:0;text-align:right;line-height:1.4}
+  .ultimate-table .stage-step+.stage-step:before{width:5px;margin-right:0}
+  .ultimate-table .table-tools{gap:9px}
+  .ultimate-table .table-tools .text-button{font-size:10px}
+  .ultimate-table .community-label{font-size:9px;letter-spacing:.6px;margin-bottom:9px}
+  .ultimate-table .table-result .result-label{font-size:9px;letter-spacing:.3px}
+}
+@media(max-width:650px) and (max-height:700px){.ultimate-table .round-stage{top:36px}}
+@media(max-height:600px) and (min-width:651px){
+  .ultimate-table .round-stage{font-size:9px;gap:5px}
+  .ultimate-table .community-label{font-size:9px;margin-bottom:7px}
+  .casino-app:has(.ultimate-table) .round-message>div{flex-wrap:wrap;gap:2px 12px}
+}
