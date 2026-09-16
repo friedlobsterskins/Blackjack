@@ -1,0 +1,20 @@
+{
+  "passed": [
+    "Game loads with a fresh $10,000 wallet and no JavaScript errors",
+    "Chip buttons and wager shortcuts update the bet",
+    "Table rules dialog opens and closes",
+    "Blackjack insurance/stand/loss settles; active bets and game switching are locked",
+    "Wallet and completed hands persist across reload",
+    "Ultimate Texas Hold’em check/check/1× Play settles with Trips",
+    "Free chips refill the virtual wallet",
+    "Both tables fit a 390px mobile viewport"
+  ],
+  "errors": [],
+  "screenshots": [
+    "desktop-blackjack.png",
+    "desktop-ultimate.png",
+    "desktop-ultimate-showdown.png",
+    "mobile-ultimate.png",
+    "mobile-blackjack.png"
+  ]
+}
