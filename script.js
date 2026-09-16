@@ -3,6 +3,7 @@
   const E = window.CasinoEngine;
   const $ = id => document.getElementById(id);
   const STORAGE_KEY = 'clubRoyaleCasino.v1';
+  const SESSION_TTL = 30 * 60 * 1000;
   const SUITS = { S: '♠', H: '♥', D: '♦', C: '♣' };
   const SUIT_NAMES = { S: 'spades', H: 'hearts', D: 'diamonds', C: 'clubs' };
   const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -13,7 +14,7 @@
   const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const delay = ms => new Promise(resolve => setTimeout(resolve, reducedMotion.matches ? 0 : ms));
-  const fresh = () => ({ version: 1, balance: 10000, game: 'blackjack', bets: { blackjack: 25, ultimate: 25, trips: 0 }, net: 0, hands: 0, history: [], shoe: [], round: null, sound: false });
+  const fresh = (startingAmount = 10000) => ({ version: 1, startingAmount, balance: startingAmount, game: 'blackjack', bets: { blackjack: 25, ultimate: 25, trips: 0 }, net: 0, hands: 0, history: [], shoe: [], round: null, sound: false, chips:{blackjack:[25],ante:[25],trips:[]} });
   let state = load();
   let busy = false;
   let view = null;
@@ -23,10 +24,13 @@
   let selectedChip = 25;
   let undoBets = [];
   let lastChipZone = '';
+  let removeMode = false;
 
   function load() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      const startingAmount = validStartingAmount(saved?.startingAmount) ? saved.startingAmount : 10000;
+      if (saved && (!Number.isFinite(saved.savedAt) || Date.now() - saved.savedAt >= SESSION_TTL || saved.savedAt > Date.now())) return fresh(startingAmount);
       if (!saved || saved.version !== 1 || !['blackjack','ultimate'].includes(saved.game) ||
           !Number.isFinite(saved.balance) || saved.balance < 0 || !Number.isFinite(saved.net) ||
           !Number.isInteger(saved.hands) || !saved.bets || !Array.isArray(saved.history) || !Array.isArray(saved.shoe)) return fresh();
@@ -37,6 +41,15 @@
       saved.bets.blackjack = validStoredBet(saved.bets.blackjack, 2000);
       saved.bets.ultimate = validStoredBet(saved.bets.ultimate, 2000);
       saved.bets.trips = Number.isInteger(saved.bets.trips) && saved.bets.trips >= 0 && saved.bets.trips <= 100 && saved.bets.trips % 5 === 0 ? saved.bets.trips : 0;
+      saved.startingAmount = startingAmount;
+      saved.chips ||= {};
+      for (const [zone,amount] of [['blackjack',saved.bets.blackjack],['ante',saved.bets.ultimate],['trips',saved.bets.trips]]) {
+        saved.chips[zone] = matchingChips(saved.chips[zone],amount);
+      }
+      if (saved.round?.game === 'ultimate') {
+        const draft = saved.round.draftChips;
+        if (!Array.isArray(draft) || draft.some(n => ![5,25,50,100,500].includes(n)) || chipTotal(draft) > saved.balance || chipTotal(draft) > saved.round.ante * ({preflop:4,flop:2,river:1}[saved.round.phase] || 0)) saved.round.draftChips = [];
+      }
       return saved;
     } catch { return fresh(); }
   }
@@ -46,6 +59,7 @@
   }
 
   function save() {
+    state.savedAt = Date.now();
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     catch {
       if (!storageWarned) {
@@ -92,6 +106,9 @@
   const maxBet = () => 2000;
   const bet = () => Number($('bet-input').value);
   const trips = () => ultimate() ? Number($('trips-input').value) : 0;
+  const canBuildPlay = () => !busy && ultimate() && active() && !state.round.play;
+  const draftAmount = () => chipTotal(state.round?.draftChips || []);
+  function validStartingAmount(value) { return Number.isInteger(value) && value >= 100 && value <= 1000000 && value % 5 === 0; }
 
   function betError() {
     const amount = bet();
@@ -118,11 +135,13 @@
     $('poker-bets').hidden = !ultimate();
     $('blind-bet').textContent = compact(amount);
     $('wager-label').textContent = state.round ? finalVisible() ? 'LAST WAGER' : 'ON THE TABLE' : 'ON THE TABLE';
-    $('wager-total').textContent = cash(state.round ? state.round.wagered : ultimate() ? amount * 2 + trips() : amount);
+    $('wager-total').textContent = cash(state.round ? state.round.wagered + draftAmount() : ultimate() ? amount * 2 + trips() : amount);
     $('betting-title').textContent = isLocked ? 'You’re at the table' : 'Place your bet';
-    document.querySelectorAll('[data-chip], [data-adjust], #bet-input, #trips-input').forEach(el => { el.disabled = isLocked; });
-    document.querySelectorAll('[data-action="clear"], [data-action="repeat"], [data-action="bet"]').forEach(el => { el.disabled = isLocked; });
-    document.querySelectorAll('[data-action="undo"]').forEach(el => { el.disabled = isLocked || !undoBets.length; });
+    document.querySelectorAll('[data-adjust], #bet-input, #trips-input').forEach(el => { el.disabled = isLocked; });
+    document.querySelectorAll('[data-chip], [data-action="remove-chip"]').forEach(el => { el.disabled = isLocked && !canBuildPlay(); });
+    document.querySelectorAll('[data-action="repeat"], [data-action="bet"]').forEach(el => { el.disabled = isLocked; });
+    document.querySelectorAll('[data-action="clear"]').forEach(el => { el.disabled = isLocked && !canBuildPlay(); });
+    document.querySelectorAll('[data-action="undo"]').forEach(el => { el.disabled = canBuildPlay() ? !draftAmount() : isLocked || !undoBets.length; });
     $('deal-btn').disabled = isLocked || Boolean(betError());
     $('deal-btn').hidden = isLocked;
     $('deal-btn').innerHTML = '<span>' + (busy ? 'Dealing…' : active() ? 'Hand in progress' : state.round ? 'Deal again' : 'Deal me in') + '</span><kbd class="action-key" aria-hidden="true">↵</kbd>';
@@ -143,13 +162,13 @@
     else if (action === 'up') value += 5;
     else if (action === 'down') value -= 5;
     else if (action === 'half') value = Math.floor(value / 10) * 5;
-    else if (action === 'twice') value *= 2;
     else if (action === 'max') value = Math.min(maxBet(), available);
     value = Math.max(0, Math.min(maxBet(), value));
     rememberBet();
     state.round = null;
     $('bet-input').value = value;
     state.bets[state.game] = value;
+    state.chips[ultimate() ? 'ante' : 'blackjack'] = makeChips(value);
     save();
     sound('chip');
     render();
@@ -218,14 +237,13 @@
   function bestCard(card) {
     return finalVisible() && ultimate() && state.round.playerRank.cards.some(c => c.rank === card.rank && c.suit === card.suit);
   }
-  function houseCard(card) {
+  function visibleHouse() {
     const r = state.round;
-    if (!ultimate() || !r?.qualifies || !(view?.dealerReveal || finalVisible())) return false;
-    const rank = r.dealerRank;
-    if (!rank.cards.some(c => c.rank === card.rank && c.suit === card.suit)) return false;
-    // For pairs, trips and quads, lift the matching ranks, leaving kickers flat.
-    return ![1,2,3,7].includes(rank.category) || rank.cards.filter(c => c.rank === card.rank).length > 1;
+    if (!ultimate() || !r) return {category:0,cards:[]};
+    const revealCount = view?.dealerFaceCount ?? (finalVisible() ? 2 : 0);
+    return E.visiblePokerHand([...r.board.slice(0,visibleBoardCount()), ...r.dealer.slice(0,revealCount)]);
   }
+  function houseCard(card) { return visibleHouse().cards.some(c => c.rank === card.rank && c.suit === card.suit); }
   function totalText(cards) {
     const value = E.blackjackValue(cards);
     return (value.soft ? 'Soft ' : '') + value.total;
@@ -238,7 +256,7 @@
     $('table-name').textContent = ultimate() ? 'ULTIMATE TEXAS HOLD’EM' : 'BLACKJACK';
     $('table-number').textContent = ultimate() ? 'TABLE 02' : 'TABLE 01';
     $('felt-brand').querySelector('.felt-brand-name').textContent = ultimate() ? 'Ultimate Texas Hold’em' : 'Blackjack';
-    $('felt-limit').innerHTML = 'MIN $25 <span>·</span> MAX ' + compact(maxBet()) + (ultimate() ? ' ANTE' : '');
+    $('felt-limit').innerHTML = '<b>TABLE LIMITS</b> ' + (ultimate() ? 'Ante / Blind ' : '') + '$25 – ' + compact(maxBet()) + (ultimate() ? '<span> · Trips $5 – $100 (optional)</span>' : '<span> · $5 increments</span>');
     $('community-zone').hidden = !ultimate();
     document.querySelectorAll('[data-game]').forEach(el => {
       el.classList.toggle('active', el.dataset.game === state.game);
@@ -250,11 +268,15 @@
     const visibleDealer = r ? r.dealer.slice(0, dealerCount) : [];
     $('dealer-hand').classList.toggle('blackjack-hand',!ultimate());
     $('dealer-hand').classList.toggle('many-cards', dealerCount > 4);
-    $('dealer-hand').innerHTML = r ? visibleDealer.map((c,i) => cardHTML(c, { hidden: !reveal && (ultimate() || i > 0), house:houseCard(c), animate: view?.newCard === 'd' + i, cardIndex:ultimate() ? undefined : i })).join('') : cardHTML(null,{cardIndex:ultimate() ? undefined : 0}) + cardHTML(null,{cardIndex:ultimate() ? undefined : 1});
+    $('dealer-hand').innerHTML = r ? visibleDealer.map((c,i) => cardHTML(c, { hidden: ultimate() ? i >= (view?.dealerFaceCount ?? (settled ? 2 : 0)) : !reveal && i > 0, house:houseCard(c), animate: view?.newCard === 'd' + i, cardIndex:ultimate() ? undefined : i })).join('') : cardHTML(null,{cardIndex:ultimate() ? undefined : 0}) + cardHTML(null,{cardIndex:ultimate() ? undefined : 1});
     const shownDealer = !ultimate() ? visibleDealer.filter((_,i) => reveal || i === 0) : [];
     $('dealer-total').hidden = !shownDealer.length || ultimate();
     $('dealer-total').textContent = shownDealer.length ? totalText(shownDealer) : '';
     $('dealer-caption').textContent = !r ? 'Your next hand is waiting' : ultimate() ? (reveal ? r.dealerRank.name + (r.qualifies ? ' · House qualifies' : ' · House does not qualify') : 'Dealer needs a pair to qualify') : settled ? (E.isBlackjack(r.dealer) ? 'Blackjack' : E.blackjackValue(r.dealer).total > 21 ? 'Dealer busts' : 'Dealer total: ' + totalText(r.dealer)) : reveal ? 'Dealer is playing' : 'Dealer hits soft 17';
+    if (ultimate() && r) {
+      const house = visibleHouse();
+      $('dealer-caption').textContent = house.category ? house.name + ' · House qualifies' : settled ? 'High card · House does not qualify' : 'House needs a pair · Blue cards rise as revealed';
+    }
 
     if (ultimate()) {
       const count = visibleBoardCount();
@@ -284,7 +306,7 @@
     }
   }
 
-  const ACTION_KEYS = {hit:'H',stand:'S',double:'D',split:'P',check:'C',fold:'F',play1:'1',play2:'2',play3:'3',play4:'4',decline:'N',insurance:'I'};
+  const ACTION_KEYS = {hit:'H',stand:'S',double:'D',split:'P',check:'C',fold:'F',play1:'1',play2:'2',play4:'4',decline:'N',insurance:'I'};
 
   function button(action,label,enabled=true,style='',note='') {
     const key = ACTION_KEYS[action];
@@ -327,8 +349,8 @@
       const legal = E.ultimateActions(r,state.balance);
       if (r.phase === 'preflop') {
         title = 'Your hole cards. Your first move.';
-        detail = 'Raise 3× or 4× your ante, or check to see the flop.';
-        actions = button('check','Check',true,'','See the flop') + button('play3','Play 3×',legal.includes('play3'),'',compact(r.ante*3)) + button('play4','Play 4×',legal.includes('play4'),'primary',compact(r.ante*4));
+        detail = 'Build 3× or 4× Ante on Play, use Play 4×, or check.';
+        actions = button('check','Check',true,'','See the flop') + button('play4','Play 4×',legal.includes('play4'),'primary',compact(r.ante*4));
       } else if (r.phase === 'flop') {
         title = 'The flop is out. Play or check?';
         detail = 'Bet 2× your ante, or check to the turn and river.';
@@ -337,6 +359,12 @@
         title = 'All the cards are out. Your call.';
         detail = 'Bet 1× your ante to face the dealer, or fold.';
         actions = button('fold','Fold',true,'danger') + button('play1','Play 1×',legal.includes('play1'),'primary',compact(r.ante));
+      }
+      if (draftAmount()) {
+        const multiplier = draftAmount() / r.ante;
+        const valid = legal.includes('play' + multiplier);
+        detail = compact(draftAmount()) + ' placed · ' + multiplier.toFixed(2).replace(/\.00$/,'') + '× Ante. ' + (valid ? 'Confirm your Play bet.' : 'Build to ' + (r.phase === 'preflop' ? compact(r.ante*3) + ' or ' + compact(r.ante*4) : compact(r.ante*(r.phase === 'flop' ? 2 : 1))) + '.');
+        actions = button('clear','Clear Play',true) + button('confirm-play','Confirm Play',valid,'primary',compact(draftAmount()));
       }
     }
     $('round-message').className = 'round-message ' + resultClass;
@@ -388,22 +416,48 @@
     const pending = busy && state.round?.phase === 'settled' && state.round.paid;
     const visibleNet = state.net - (pending ? cents(state.round.returned - state.round.wagered) : 0);
     const records = pending ? state.history.slice(1) : state.history;
-    $('balance').textContent = cash(state.balance - (pending ? state.round.returned : 0));
+    $('balance').textContent = cash(state.balance - (pending ? state.round.returned - (view?.collected || 0) : 0));
     $('session-net').textContent = signed(visibleNet);
     $('session-net').className = visibleNet > 0 ? 'positive' : visibleNet < 0 ? 'negative' : '';
     $('session-hands').textContent = (state.hands - (pending ? 1 : 0)).toLocaleString();
     if ($('recent-hands')) $('recent-hands').innerHTML = records.length ? historyHTML(records.slice(0,3)) : '<div class="history-empty"><span aria-hidden="true">♧</span><p>A fresh deck. A fresh start.<small>Your hands will appear here.</small></p></div>';
+    renderSound();
+    updateBetting();
+    const raised = new Set(Array.from(document.querySelectorAll('.house-card'),el => el.getAttribute('aria-label').split(',')[0]));
+    renderTable();
+    if (!reducedMotion.matches) document.querySelectorAll('#dealer-hand .card, #community-hand .card').forEach(card => {
+      const wasRaised = raised.has(card.getAttribute('aria-label').split(',')[0]);
+      const isRaised = card.classList.contains('house-card');
+      if (wasRaised !== isRaised) card.animate([{transform:wasRaised ? 'translateY(-22px)' : 'translateY(0)'},{transform:isRaised ? 'translateY(-22px)' : 'translateY(0)'}],{duration:240,easing:'ease-out'});
+    });
+    renderActions();
+    renderWagers();
+    renderRoundProgress();
+    renderChipSelection();
+    animateDealtCard();
+  }
+
+  function renderSound() {
     $('sound-btn').setAttribute('aria-pressed',String(Boolean(state.sound)));
     $('sound-btn').setAttribute('aria-label',state.sound ? 'Turn sound off' : 'Turn sound on');
     $('sound-btn').title = state.sound ? 'Turn sound off' : 'Turn sound on';
     $('sound-btn').classList.toggle('sound-on',Boolean(state.sound));
     $('sound-waves').setAttribute('d',state.sound ? 'M15 8c2 2 2 6 0 8m3-11c4 4 4 10 0 14' : 'm16 9 6 6m0-6-6 6');
-    updateBetting();
-    renderTable();
-    renderActions();
-    renderWagers();
-    renderRoundProgress();
-    renderChipSelection();
+  }
+
+  function animateDealtCard() {
+    if (reducedMotion.matches || !view?.newCard || view.animatedCard === view.newCard) return;
+    const card = document.querySelector('.card.dealt');
+    if (!card?.animate) return;
+    view.animatedCard = view.newCard;
+    const dest = card.getBoundingClientRect();
+    if (view.flipping) {
+      card.animate([{rotate:'y 90deg'},{rotate:'y 0deg'}],{duration:260,easing:'ease-out'});
+      return;
+    }
+    const shoe = document.querySelector('.shoe-prop').getBoundingClientRect();
+    const table = $('table').getBoundingClientRect();
+    card.animate([{translate:(shoe.width ? shoe.left-dest.left : table.right-dest.left-35) + 'px ' + (shoe.width ? shoe.top-dest.top : table.top-dest.top+30) + 'px',opacity:.3},{translate:'0 0',opacity:1}],{duration:300,easing:'cubic-bezier(.2,.7,.3,1)'});
   }
 
   // Debit, settlement, history and round state are saved together before visual
@@ -435,19 +489,25 @@
         render();
       }
       await delay(450);
-      view.dealerReveal = true;
-      view.newCard = 'd1';
       view.message = 'Showdown.';
-      sound();
-      render();
-      await delay(550);
+      view.flipping = true;
+      for (let i = 0; i < 2; i++) {
+        view.dealerFaceCount = i + 1;
+        view.dealerReveal = i === 1;
+        view.newCard = 'd' + i;
+        sound(); render();
+        await delay(450);
+      }
     } else {
       await delay(430);
       view.dealerReveal = true;
       view.dealerCount = 2;
       view.newCard = 'd1';
+      view.flipping = true;
       sound();
       render();
+      await delay(280);
+      view.flipping = false;
       for (let i = 2; i < r.dealer.length; i++) {
         await delay(470);
         view.dealerCount = i + 1;
@@ -458,14 +518,14 @@
       await delay(450);
     }
     if (r.returned > r.wagered) sound('win');
-    if (ultimate()) {
+    {
       view.resultReveal = true;
       view.payout = true;
       view.clearedZones = [];
       view.newCard = '';
       view.message = 'Settling your chips…';
       render();
-      await animatePokerPayout(r);
+      await animatePayout(r);
     }
   }
 
@@ -487,13 +547,15 @@
         state.round = E.createBlackjack(bet(),state.shoe);
         state.shoe = state.round.shoe;
       }
+      state.round.chips = ultimate() ? {ante:matchingChips(state.chips.ante,bet()),blind:matchingChips(state.chips.ante,bet()),trips:matchingChips(state.chips.trips,trips()),play:[]} : {blackjack:matchingChips(state.chips.blackjack,bet())};
+      state.round.draftChips = [];
       state.balance = cents(state.balance - state.round.wagered);
       settleWallet();
       save();
       view = { playerCounts:[0], dealerCount:0, dealerReveal:false, boardCount:0, message:'Dealing your cards…', newCard:'' };
       render();
       for (const [who,count] of [['p',1],['d',1],['p',2],['d',2]]) {
-        await delay(190);
+        await delay(330);
         if (who === 'p') view.playerCounts[0] = count;
         else view.dealerCount = count;
         view.newCard = who === 'p' ? 'p0-' + (count-1) : 'd' + (count-1);
@@ -512,9 +574,16 @@
     const r = state.round;
     const priorBoard = visibleBoardCount();
     const previousCounts = ultimate() ? [r.player.length] : r.hands.map(h => h.cards.length);
+    const previousActive = r.activeHand;
     view = { playerCounts:previousCounts.slice(), dealerCount:2, dealerReveal:false, boardCount:priorBoard, newCard:'', message:action === 'check' ? 'Checking…' : action === 'insurance' || action === 'decline' ? 'Dealer checks for blackjack…' : action === 'stand' ? 'Standing.' : action === 'fold' ? 'You fold. Settling your wagers…' : 'Making your play…' };
     try {
       const result = ultimate() ? E.actUltimate(r,action,state.balance) : E.actBlackjack(r,action,state.balance);
+      if (!ultimate() && action === 'split') view.playerCounts.splice(previousActive,1,1,1);
+      if (ultimate()) {
+        r.chips ||= {};
+        if (result.cost) r.chips.play = matchingChips(r.draftChips,result.cost);
+        r.draftChips = [];
+      }
       state.balance = cents(state.balance - result.cost);
       if (!ultimate()) state.shoe = r.shoe;
       settleWallet();
@@ -522,11 +591,15 @@
       render();
       await delay(220);
       if (!ultimate()) {
-        view.playerCounts = r.hands.map(h => h.cards.length);
-        const i = action === 'split' ? r.activeHand : previousCounts.findIndex((n,i) => r.hands[i]?.cards.length > n);
-        if (i >= 0) { view.newCard = 'p' + i + '-' + (r.hands[i].cards.length - 1); sound(); }
         render();
-        await delay(200);
+        for (let i = 0; i < r.hands.length; i++) {
+          for (let n = view.playerCounts[i] || 0; n < r.hands[i].cards.length; n++) {
+            await delay(330);
+            view.playerCounts[i] = n + 1;
+            view.newCard = 'p' + i + '-' + n;
+            sound(); render();
+          }
+        }
       } else if (r.phase !== 'settled') {
         const target = r.phase === 'flop' ? 3 : 5;
         for (let i = priorBoard; i < target; i++) {
@@ -553,8 +626,31 @@
 
   const CHIP_COLORS = { 5:'#ab5549', 25:'#4c865b', 50:'#3c7182', 100:'#313b36', 500:'#8c6da1' };
 
+  function chipTotal(chips) { return cents(chips.reduce((sum,n) => sum+n,0)); }
+  function makeChips(amount) {
+    if (!Number.isFinite(amount) || amount <= 0) return [];
+    if (amount > 2000000) return [amount];
+    const chips = [];
+    for (const denomination of [100000,10000,1000,500,100,50,25,5]) {
+      while (amount >= denomination) { chips.push(denomination); amount = cents(amount-denomination); }
+    }
+    if (amount > 0) chips.push(amount);
+    return chips;
+  }
+  function matchingChips(chips,amount) {
+    return Array.isArray(chips) && chips.every(n => Number.isFinite(n) && n > 0) && chipTotal(chips) === amount ? chips.slice() : makeChips(amount);
+  }
+  function removeChips(chips,amount) {
+    const remaining = chips.slice();
+    const exact = remaining.lastIndexOf(amount);
+    if (exact >= 0) { remaining.splice(exact,1); return remaining; }
+    let removed = 0;
+    while (remaining.length && removed < amount) removed = cents(removed + remaining.pop());
+    return remaining.concat(makeChips(cents(removed-amount)));
+  }
+
   function rememberBet() {
-    undoBets.push({ bet: bet(), trips: Number($('trips-input').value) || 0 });
+    undoBets.push({ bet: bet(), trips: Number($('trips-input').value) || 0, chips:JSON.parse(JSON.stringify(state.chips)) });
     if (undoBets.length > 30) undoBets.shift();
   }
 
@@ -562,13 +658,16 @@
     state.round = null;
     state.bets[state.game] = amount;
     state.bets.trips = side;
+    const zone = ultimate() ? 'ante' : 'blackjack';
+    state.chips[zone] = matchingChips(state.chips[zone],amount);
+    state.chips.trips = matchingChips(state.chips.trips,side);
     syncInputs();
     save();
     render();
   }
 
   function selectChip(amount) {
-    if (locked()) return;
+    if (locked() && !canBuildPlay()) return;
     selectedChip = amount;
     renderChipSelection();
     sound('chip');
@@ -580,20 +679,18 @@
       el.classList.toggle('selected', selected);
       el.setAttribute('aria-pressed', String(selected));
     });
-    $('selected-chip-label').textContent = compact(selectedChip) + ' selected';
-    $('chip-instruction').textContent = locked() ? 'YOUR CHIPS ARE IN PLAY.' : 'SELECT A CHIP. CLICK A CIRCLE.';
+    $('selected-chip-label').textContent = (removeMode ? 'Remove ' : 'Add ') + compact(selectedChip);
+    $('chip-instruction').textContent = canBuildPlay() ? 'BUILD YOUR PLAY BET. THEN CONFIRM.' : locked() ? 'YOUR CHIPS ARE IN PLAY.' : 'SELECT A CHIP. CLICK OR DRAG TO BET.';
+    document.querySelector('[data-action="remove-chip"]')?.setAttribute('aria-pressed',String(removeMode));
   }
 
-  function chipStack(amount) {
+  function chipStack(amount, chips) {
     if (!amount) return '';
-    let remaining = amount;
+    const pieces = matchingChips(chips,amount);
+    const pileSize = Math.max(12,Math.ceil(pieces.length/4));
     const piles = [];
-    for (const denomination of [500,100,50,25,5]) {
-      const count = Math.floor(remaining / denomination);
-      if (count) { piles.push({ denomination, count }); remaining = cents(remaining - count * denomination); }
-    }
-    if (remaining) piles.push({ denomination: remaining, count: 1 });
-    return '<span class="coin-group" aria-hidden="true">' + piles.slice(0,3).map(pile => '<span class="coin-pile">' + Array.from({length:Math.min(pile.count,4)},(_,i) => '<span class="table-chip" style="--chip-color:' + (CHIP_COLORS[pile.denomination] || '#94794c') + ';--level:' + i + '"><span>' + compact(pile.denomination) + '</span></span>').join('') + '</span>').join('') + '</span>';
+    for (let i = 0; i < pieces.length; i += pileSize) piles.push(pieces.slice(i,i+pileSize));
+    return '<span class="coin-group" data-chip-count="' + pieces.length + '" aria-hidden="true">' + piles.map(pile => '<span class="coin-pile" style="--stack-step:' + Math.min(4,30/Math.max(1,pile.length-1)) + 'px">' + pile.map((denomination,i) => '<span class="table-chip" style="--chip-color:' + (CHIP_COLORS[denomination] || '#94794c') + ';--level:' + i + '"><span>' + compact(denomination) + '</span></span>').join('') + '</span>').join('') + '</span>';
   }
 
   function wagerCircle(zone, label, amount, options = {}) {
@@ -601,26 +698,28 @@
     const outcome = result === 'win' || result === 'blackjack' ? 'win' : result === 'lose' || result === 'bust' ? 'lose' : result === 'push' ? 'push' : '';
     const enabled = options.enabled ?? !locked();
     const hint = options.hint || (enabled ? 'Add ' + compact(selectedChip) + ' to ' + label : label + ' is locked for this hand');
-    return '<button class="wager-zone ' + (options.className || '') + (outcome ? ' zone-' + outcome : '') + (lastChipZone === zone ? ' zone-pop' : '') + '" data-zone="' + zone + '" aria-label="' + escape(label + ', ' + compact(amount) + '. ' + hint) + '" title="' + escape(hint) + '"' + (enabled ? '' : ' disabled') + '><span class="zone-label">' + label + '</span><span class="zone-oval"></span>' + (amount ? chipStack(amount) : '<span class="zone-empty">' + (zone === 'play' ? '<span class="zone-hint">' + (active() ? 'PLAY' : 'AFTER DEAL') + '</span>' : '+') + '</span>') + '<span class="zone-value">' + (amount ? compact(amount) : zone === 'trips' ? 'OPTIONAL' : zone === 'play' ? 'PLAY BET' : 'PLACE BET') + '</span></button>';
+    return '<button class="wager-zone ' + (options.className || '') + (outcome ? ' zone-' + outcome : '') + (lastChipZone === zone ? ' zone-pop' : '') + '" data-zone="' + zone + '" aria-label="' + escape(label + ', ' + compact(amount) + '. ' + hint) + '" title="' + escape(hint) + '"' + (enabled ? '' : ' disabled') + '><span class="zone-label">' + label + '</span><span class="zone-oval"></span>' + (amount ? chipStack(amount,options.chips) : '<span class="zone-empty">' + (zone === 'play' ? '<span class="zone-hint">' + (active() ? 'ADD CHIPS' : 'AFTER DEAL') + '</span>' : '+') + '</span>') + '<span class="zone-value">' + (amount ? compact(amount) + (zone === 'play' && rAnte() ? ' · ' + Math.round(amount/rAnte()*100)/100 + '×' : '') : zone === 'trips' ? 'OPTIONAL' : zone === 'play' ? 'PLAY BET' : 'PLACE BET') + '</span></button>';
   }
+  function rAnte() { return state.round?.ante || 0; }
 
   function renderWagers() {
     const r = state.round;
     if (ultimate()) {
       const played = r?.play || 0;
-      const amounts = { ante:r?.ante ?? bet(), blind:r?.blind ?? bet(), trips:r?.trips ?? trips(), play:played };
+      const amounts = { ante:r?.ante ?? bet(), blind:r?.blind ?? bet(), trips:r?.trips ?? trips(), play:played || draftAmount() };
       const result = name => r?.breakdown?.find(item => item.label.toLowerCase() === name)?.result;
       $('betting-spots').innerHTML = ['trips','ante','blind','play'].map(zone => wagerCircle(zone,zone.toUpperCase(),amounts[zone],{
         className:'poker-spot spot-' + zone + (finalVisible() && (!view?.payout || view.clearedZones.includes(zone)) ? ' chips-cleared' : ''),
         result:result(zone),
+        chips:zone === 'play' && !played ? r?.draftChips : r?.chips?.[zone] || state.chips[zone === 'blind' ? 'ante' : zone],
         enabled:zone === 'play' ? !busy && active() && !played && E.ultimateActions(r,state.balance).some(action=>action.startsWith('play')) : !locked(),
-        hint:zone === 'play' ? 'Make your Play bet using the available raise options.' : zone === 'trips' ? 'Add a Trips side bet. It pays independently of the dealer.' : 'Ante and Blind always match. Each click adds a chip to both.'
+        hint:zone === 'play' ? 'Click or drop chips to build Play. Remove with the − tool or right-click. Confirm when ready.' : zone === 'trips' ? 'Add a Trips side bet. It pays independently of the dealer.' : 'Ante and Blind always match. Each click adds a chip to both.'
       })).join('') + '<span class="bet-equals" aria-hidden="true">=</span>';
       $('felt-brand').querySelector('.felt-payout').textContent = 'DEALER QUALIFIES WITH A PAIR OR BETTER';
-      $('table-paytable').innerHTML = '<h3>THE PAY TABLE</h3><table><thead><tr><th>Your hand</th><th>Blind</th><th>Trips</th></tr></thead><tbody>' + [['Royal flush','500:1','50:1'],['Straight flush','50:1','40:1'],['Four of a kind','10:1','30:1'],['Full house','3:1','8:1'],['Flush','3:2','7:1'],['Straight','1:1','4:1'],['Three of a kind','Push','3:1']].map(row => '<tr>' + row.map(cell=>'<td>'+cell+'</td>').join('') + '</tr>').join('') + '</tbody></table><p>BLIND: MUST BEAT THE DEALER<br>TRIPS: PAYS EVEN IF YOU FOLD</p>';
+      $('table-paytable').innerHTML = '<h3>THE PAY TABLE</h3><table><thead><tr><th>Your hand</th><th>Blind</th><th>Trips</th></tr></thead><tbody>' + [['Royal flush','500:1','50:1'],['Straight flush','50:1','40:1'],['Four of a kind','10:1','30:1'],['Full house','3:1','8:1'],['Flush','3:2','7:1'],['Straight','1:1','4:1'],['Three of a kind','Push','3:1'],['Two pair or less','Push','Lose']].map(row => '<tr>' + row.map(cell=>'<td>'+cell+'</td>').join('') + '</tr>').join('') + '</tbody></table><p>ANTE / PLAY 1:1 &middot; HOUSE: PAIR+<br>BLIND: MUST WIN &middot; TRIPS: INDEPENDENT</p>';
     } else {
       const hands = r?.hands || [{bet:bet()}];
-      $('betting-spots').innerHTML = '<div class="blackjack-bets ' + (hands.length > 1 ? 'split-bets' : '') + '">' + hands.map((h,i) => '<div class="spot-wrap">' + wagerCircle('blackjack',hands.length > 1 ? 'HAND ' + (i+1) : 'YOUR BET',h.bet,{result:h.result,enabled:!locked()}) + '</div>').join('') + '</div>' + (r && (r.phase === 'insurance' || r.insurance.bet) ? wagerCircle('insurance','INSURANCE',r.insurance.bet,{className:'spot-insurance',result:r.insurance.result,enabled:!busy && r.phase === 'insurance' && E.blackjackActions(r,state.balance).includes('insurance'),hint:'Insure for half the original bet. Pays 2:1 on dealer blackjack.'}) : '');
+      $('betting-spots').innerHTML = '<div class="blackjack-bets ' + (hands.length > 1 ? 'split-bets' : '') + '">' + hands.map((h,i) => '<div class="spot-wrap">' + wagerCircle('blackjack',hands.length > 1 ? 'HAND ' + (i+1) : 'YOUR BET',h.bet,{chips:r?.chips?.blackjack || state.chips.blackjack,result:h.result,enabled:!locked(),className:finalVisible() && !view?.payout ? 'chips-cleared' : ''}) + '</div>').join('') + '</div>' + (r && (r.phase === 'insurance' || r.insurance.bet) ? wagerCircle('insurance','INSURANCE',r.insurance.bet,{className:'spot-insurance',result:r.insurance.result,enabled:!busy && r.phase === 'insurance' && E.blackjackActions(r,state.balance).includes('insurance'),hint:'Insure for half the original bet. Pays 2:1 on dealer blackjack.'}) : '');
       $('felt-brand').querySelector('.felt-payout').textContent = 'BLACKJACK PAYS 3 TO 2';
       $('table-paytable').innerHTML = '<h3>AT THIS TABLE</h3><table><tbody><tr><td>Blackjack</td><td>3:2</td></tr><tr><td>Win</td><td>1:1</td></tr><tr><td>Insurance</td><td>2:1</td></tr><tr><td>Equal totals</td><td>Push</td></tr></tbody></table><p>6 DECKS · DEALER HITS SOFT 17<br>DOUBLE AFTER SPLIT ALLOWED</p>';
     }
@@ -650,7 +749,7 @@
     animation.oncancel = () => chip.remove();
   }
 
-  async function animatePokerPayout(round) {
+  async function animatePayout(round) {
     if (reducedMotion.matches) return;
     const layer = document.createElement('div');
     layer.className = 'payout-layer';
@@ -663,12 +762,12 @@
     };
     const house = center($('dealer-hand'));
     const player = center(document.querySelector('.chip-selector'));
-    async function travel(amount, from, to, wait, kind) {
+    async function travel(amount, from, to, wait, kind, chips) {
       const stack = document.createElement('span');
       stack.className = 'payout-stack payout-' + kind;
       stack.style.left = from.x + 'px';
       stack.style.top = from.y + 'px';
-      stack.innerHTML = chipStack(amount);
+      stack.innerHTML = chipStack(amount,chips);
       layer.append(stack);
       const dx = to.x-from.x, dy = to.y-from.y;
       const animation = stack.animate([
@@ -680,33 +779,56 @@
       finally { stack.remove(); }
     }
     try {
-      await Promise.all(round.breakdown.filter(line => line.bet > 0).map(async (line,index) => {
-        const zone = document.querySelector('[data-zone="' + line.label.toLowerCase() + '"]');
+      const lines = ultimate() ? round.breakdown : round.hands.map((hand,i) => ({...hand,label:'blackjack',index:i})).concat(round.insurance.bet ? [{...round.insurance,label:'insurance'}] : []);
+      await Promise.all(lines.filter(line => line.bet > 0).map(async (line,index) => {
+        const key = line.label.toLowerCase();
+        const zone = document.querySelectorAll('[data-zone="' + key + '"]')[line.index || 0];
         if (!zone) return;
         const spot = center(zone);
         const clearChips = () => {
-          view.clearedZones.push(line.label.toLowerCase());
-          document.querySelector('[data-zone="' + line.label.toLowerCase() + '"]')?.classList.add('chips-cleared');
+          view.clearedZones.push(key);
+          zone.classList.add('chips-cleared');
         };
         if (line.returned > line.bet) {
-          await travel(cents(line.returned-line.bet),house,spot,index*80,'win');
+          const profit = cents(line.returned-line.bet);
+          const paidChips = matchingChips(round.chips?.[key],line.bet);
+          const additions = makeChips(profit);
+          // Pay onto the actual wager, keeping its original chips underneath.
+          let displayed = line.bet;
+          for (let i = 0; i < additions.length; i++) {
+            await travel(additions[i],house,spot,i === 0 ? index*80 : 0,'win');
+            paidChips.push(additions[i]);
+            displayed = cents(displayed + additions[i]);
+            zone.querySelector('.coin-group').outerHTML = chipStack(displayed,paidChips);
+            zone.querySelector('.zone-value').textContent = compact(displayed);
+            zone.dataset.paidAmount = displayed;
+            sound('chip');
+          }
+          await delay(320);
           clearChips();
-          await travel(line.returned,spot,player,70,'return');
+          await travel(line.returned,spot,player,70,'return',paidChips);
         } else {
           clearChips();
           await travel(line.bet,spot,line.returned ? player : house,index*80,line.returned ? 'return' : 'loss');
         }
+        view.collected = cents((view.collected || 0) + line.returned);
+        $('balance').textContent = cash(state.balance-round.returned+view.collected);
       }));
     } finally { layer.remove(); }
   }
 
-  function placeChip(zone, remove = false) {
+  function placeChip(zone, remove = removeMode) {
     if (zone === 'play') {
-      if (busy || !active() || !ultimate()) return;
-      if (state.round.phase === 'flop') { void act('play2'); return; }
-      if (state.round.phase === 'river') { void act('play1'); return; }
-      toast('Choose Play 3× or Play 4× on the control rail.');
-      focusActions();
+      if (!canBuildPlay()) return;
+      const r = state.round;
+      const next = draftAmount() + (remove ? -selectedChip : selectedChip);
+      const limit = r.ante * ({preflop:4,flop:2,river:1}[r.phase] || 0);
+      if (next < 0) { toast('Choose a smaller chip to remove, or clear Play.'); return; }
+      if (next > Math.min(limit,state.balance)) { toast('Play allows up to ' + compact(Math.min(limit,state.balance)) + ' here. Choose a smaller chip.'); return; }
+      r.draftChips = remove ? removeChips(r.draftChips || [],selectedChip) : [...(r.draftChips || []),selectedChip];
+      lastChipZone = zone;
+      save(); render(); sound('chip');
+      if (!remove) flyChip(zone);
       return;
     }
     if (zone === 'insurance') { if (!busy) void act('insurance'); return; }
@@ -720,6 +842,9 @@
     const required = ultimate() ? nextBet*3+nextTrips : nextBet;
     if (required > state.balance) { toast('Not enough chips for that bet' + (ultimate() ? ' and the minimum Play.' : '.') + ' Add free chips with +.'); return; }
     rememberBet();
+    const key = isTrips ? 'trips' : ultimate() ? 'ante' : 'blackjack';
+    const chips = matchingChips(state.chips[key],isTrips ? trips() : bet());
+    state.chips[key] = remove ? removeChips(chips,selectedChip) : [...chips,selectedChip];
     lastChipZone = zone;
     setOpeningBets(nextBet,nextTrips);
     sound('chip');
@@ -740,7 +865,6 @@
     $('fullscreen-btn').setAttribute('aria-label',isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
     $('fullscreen-btn').title = isFullscreen ? 'Exit fullscreen · Esc' : 'Enter fullscreen';
     $('fullscreen-btn').querySelector('span').textContent = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
-    $('fullscreen-hint').textContent = isFullscreen ? 'Press Esc to leave fullscreen' : 'Your seat. Your pace.';
   }
 
   function switchGame(game) {
@@ -767,7 +891,7 @@
       title = ultimate() ? 'Your first Hold’em hand' : 'Your first blackjack hand';
       kicker = 'LEARN AS YOU PLAY';
       html = ultimate()
-        ? '<p class="rules-intro">Make a better five-card poker hand than the dealer. Your two cards and the five cards in the middle all count.</p><ol class="quick-guide-steps"><li><b>Place your opening bets.</b> Ante and Blind match automatically. A $25 Ante means $50 on the table; keep chips for your Play bet. Trips is an optional side bet.</li><li><b>Choose when to Play.</b> With your two cards, bet 3× or 4× your Ante, or Check to see three community cards. At the flop, Play 2× or Check again. With all five cards visible, Play 1× or Fold.</li><li><b>Watch the showdown.</b> You make one Play bet per hand. The remaining cards reveal automatically. Your best five cards glow, and Round details explains each payout.</li></ol><h3>At a glance</h3><p><b>Check</b> keeps you in without a Play bet yet. <b>Fold</b> gives up Ante and Blind; Trips still settles on your cards. The dealer needs a pair to qualify for the Ante.</p><p class="dialog-note">Keyboard: <kbd>C</kbd> Check · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> Play the matching multiple · <kbd>F</kbd> Fold · <kbd>Enter</kbd> Deal. Only available moves respond.</p>'
+        ? '<p class="rules-intro">Make a better five-card poker hand than the dealer. Your two cards and the five cards in the middle all count.</p><ol class="quick-guide-steps"><li><b>Place your opening bets.</b> Ante and Blind match automatically. A $25 Ante means $50 on the table; keep chips for your Play bet. Trips is an optional side bet.</li><li><b>Choose when to Play.</b> With your two cards, bet 3× or 4× your Ante, or Check to see three community cards. At the flop, Play 2× or Check again. With all five cards visible, Play 1× or Fold.</li><li><b>Watch the showdown.</b> You make one Play bet per hand. The remaining cards reveal automatically. The house qualifying cards rise as the board and dealer cards appear. Your best five glow gold at showdown.</li></ol><h3>At a glance</h3><p><b>Check</b> keeps you in without a Play bet yet. <b>Fold</b> gives up Ante and Blind; Trips still settles on your cards. The dealer needs a pair to qualify for the Ante.</p><p class="dialog-note">Keyboard: <kbd>C</kbd> Check · <kbd>1</kbd> <kbd>2</kbd> <kbd>4</kbd> Play the matching multiple · <kbd>F</kbd> Fold · <kbd>Enter</kbd> Deal. Only available moves respond.</p>'
         : '<p class="rules-intro">Get closer to 21 than the dealer without going over. Number cards count as shown, face cards count as 10, and an ace counts as 1 or 11.</p><ol class="quick-guide-steps"><li><b>Make your bet.</b> Your starting $25 bet is already on the table. Press Deal, or choose a chip and tap the betting circle to add it.</li><li><b>Choose your move.</b> Hit takes another card. Stand keeps your total. Double adds an equal bet and gives you one last card. Split separates matching card values into two hands with an equal extra bet.</li><li><b>See who wins.</b> The dealer plays automatically after your turn. A win pays 1:1, a natural blackjack pays 3:2, and a tie returns your bet. Press Deal again to keep playing.</li></ol><h3>A little table help</h3><p>Your total appears above your cards. “Soft” means your ace can still change from 11 to 1. The highlighted hand is yours to play when you split. Unavailable moves are dimmed.</p><p class="dialog-note">Keyboard: <kbd>H</kbd> Hit · <kbd>S</kbd> Stand · <kbd>D</kbd> Double · <kbd>P</kbd> Split · <kbd>N</kbd> No insurance · <kbd>I</kbd> Insurance · <kbd>Enter</kbd> Deal.</p>';
       html += '<p class="dialog-note">Select chips, then tap a betting circle to add them. Clear removes opening bets; Undo reverses your last change. Use Edit amount to enter a precise wager. Everything is played with free practice chips.</p>';
     } else if (type === 'rules') {
@@ -779,11 +903,11 @@
       const pending = busy && state.round?.phase === 'settled' && state.round.paid;
       const visibleNet = state.net - (pending ? cents(state.round.returned - state.round.wagered) : 0);
       const records = pending ? state.history.slice(1) : state.history;
-      html = '<div class="result-summary">' + (state.hands - (pending ? 1 : 0)) + ' hands played · Net result <b class="' + (visibleNet > 0 ? 'positive' : visibleNet < 0 ? 'negative' : '') + '">' + signed(visibleNet) + '</b></div>' + (records.length ? historyHTML(records) : '<p>Your first hand is waiting. Place a bet to get started.</p>') + '<p class="dialog-note">Your latest 50 rounds are shown. Net result includes every round and excludes free chip refills. This session is saved in this browser.</p>';
+      html = '<div class="result-summary">' + (state.hands - (pending ? 1 : 0)) + ' hands played · Net result <b class="' + (visibleNet > 0 ? 'positive' : visibleNet < 0 ? 'negative' : '') + '">' + signed(visibleNet) + '</b></div>' + (records.length ? historyHTML(records) : '<p>Your first hand is waiting. Place a bet to get started.</p>') + '<p class="dialog-note">Your latest 50 rounds are shown. Net result includes every round and excludes free chip refills. This session expires after 30 minutes of inactivity when you refresh.</p>';
     } else if (type === 'bankroll') {
       title = 'A little more to play with.';
       kicker = 'ON THE HOUSE';
-      html = '<p>Keep your seat. Add free chips to your bankroll whenever you’re between hands.</p><div class="bankroll-amount">+$10,000</div><p>These chips are just for fun. They have no cash value, and there are no deposits or withdrawals.</p><div class="dialog-actions"><button class="primary-button" data-action="refill"' + (locked() ? ' disabled' : '') + '>Add free chips</button></div>' + (locked() ? '<p class="dialog-note">Finish your current hand first.</p>' : '');
+      html = '<p>Choose your starting bankroll, then reset to begin a fresh session. Your hands, bets, and history will reset.</p><label class="bet-mode-label" for="starting-amount">STARTING CHIPS</label><div class="bet-input-wrap"><span>$</span><input id="starting-amount" type="number" min="100" max="1000000" step="5" value="' + state.startingAmount + '" inputmode="numeric"></div><div class="bet-shortcuts">' + [1000,5000,10000,25000].map(n => '<button data-action="starting-preset" data-amount="' + n + '">' + compact(n) + '</button>').join('') + '</div><p id="bankroll-error" class="bet-error" role="status"></p><div class="dialog-actions"><button class="primary-button" data-action="reset-bankroll"' + (locked() ? ' disabled' : '') + '>Reset to starting amount</button><button class="text-button" data-action="refill"' + (locked() ? ' disabled' : '') + '>Add $10,000 instead</button></div><p class="dialog-note">After 30 minutes without activity, refreshing starts a fresh session at your chosen starting amount.</p>';
     } else if (type === 'details') {
       const r = state.round;
       if (!r || r.phase !== 'settled' || busy) return;
@@ -810,8 +934,16 @@
     if (action === 'deal') void deal();
     else if (action === 'details') showDialog('details');
     else if (action === 'bet') { if (!locked()) { $('bet-dialog').showModal(); $('bet-input').focus(); } }
-    else if (action === 'clear') { if (!locked()) { rememberBet(); setOpeningBets(0,0); sound('chip'); } }
-    else if (action === 'undo') { if (!locked() && undoBets.length) { const previous = undoBets.pop(); setOpeningBets(previous.bet,previous.trips); sound('chip'); } }
+    else if (action === 'remove-chip') { removeMode = !removeMode; renderChipSelection(); }
+    else if (action === 'confirm-play') { if (canBuildPlay()) { const play = 'play' + draftAmount()/state.round.ante; if (E.ultimateActions(state.round,state.balance).includes(play)) void act(play); } }
+    else if (action === 'clear') {
+      if (canBuildPlay()) { state.round.draftChips = []; save(); render(); }
+      else if (!locked()) { rememberBet(); setOpeningBets(0,0); sound('chip'); }
+    }
+    else if (action === 'undo') {
+      if (canBuildPlay()) { state.round.draftChips?.pop(); save(); render(); }
+      else if (!locked() && undoBets.length) { const previous = undoBets.pop(); if (previous.chips) state.chips = previous.chips; setOpeningBets(previous.bet,previous.trips); sound('chip'); }
+    }
     else if (action === 'repeat') {
       if (locked()) return;
       const previous = state.lastBets?.[state.game] || (state.round ? {bet:state.round.initialBet || state.round.ante,trips:state.round.trips || 0} : {bet:25,trips:0});
@@ -821,6 +953,17 @@
       if (locked()) return;
       state.balance = cents(state.balance + 10000);
       save(); render(); $('info-dialog').close(); sound('chip'); toast('$10,000 in free chips added. Enjoy your seat.');
+    } else if (action === 'starting-preset') {
+      $('starting-amount').value = target.dataset.amount;
+    } else if (action === 'reset-bankroll') {
+      if (locked()) return;
+      const amount = Number($('starting-amount').value);
+      if (!validStartingAmount(amount)) { $('bankroll-error').textContent = 'Choose $100–$1,000,000, in $5 increments.'; return; }
+      const game = state.game;
+      state = fresh(amount); state.game = game;
+      undoBets = []; selectedChip = 25; removeMode = false; view = null;
+      syncInputs(); save(); render(); $('info-dialog').close();
+      toast('Fresh bankroll: ' + compact(amount) + '. Session history reset.');
     } else if (action) void act(action);
   });
   $('deal-btn').addEventListener('click',() => void deal());
@@ -831,11 +974,17 @@
   $('bankroll-btn').addEventListener('click',() => showDialog('bankroll'));
   $('dialog-close').addEventListener('click',() => $('info-dialog').close());
   $('info-dialog').addEventListener('click',event => { if (event.target === $('info-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } });
-  $('sound-btn').addEventListener('click',() => { state.sound = !state.sound; save(); render(); sound('chip'); });
+  $('sound-btn').addEventListener('click',() => { state.sound = !state.sound; save(); renderSound(); sound('chip'); });
   for (const id of ['bet-input','trips-input']) {
     $(id).addEventListener('input',() => {
       if (locked()) return;
-      if (!betError()) { undoBets.push({bet:state.bets[state.game],trips:state.bets.trips}); if (undoBets.length>30) undoBets.shift(); state.round = null; state.bets[state.game] = bet(); state.bets.trips = Number($('trips-input').value) || 0; save(); }
+      if (!betError()) {
+        undoBets.push({bet:state.bets[state.game],trips:state.bets.trips,chips:JSON.parse(JSON.stringify(state.chips))});
+        if (undoBets.length > 30) undoBets.shift();
+        state.round = null; state.bets[state.game] = bet(); state.bets.trips = Number($('trips-input').value) || 0;
+        state.chips[ultimate() ? 'ante' : 'blackjack'] = makeChips(bet());
+        state.chips.trips = makeChips(state.bets.trips); save();
+      }
       updateBetting(); renderTable(); renderActions(); renderWagers(); renderRoundProgress();
     });
   }
@@ -843,18 +992,18 @@
     const target = event.target.closest('[data-zone]');
     if (!target) return;
     event.preventDefault();
-    if (!locked()) placeChip(target.dataset.zone,true);
+    if (!target.disabled) placeChip(target.dataset.zone,true);
   });
   document.addEventListener('dragstart',event => {
     const chip = event.target.closest('[data-chip]');
-    if (!chip || locked()) { event.preventDefault(); return; }
+    if (!chip || (locked() && !canBuildPlay())) { event.preventDefault(); return; }
     selectChip(Number(chip.dataset.chip));
     event.dataTransfer.setData('text/plain',chip.dataset.chip);
     event.dataTransfer.effectAllowed = 'copy';
   });
   document.addEventListener('dragover',event => {
     const target = event.target.closest('[data-zone]');
-    if (!target || target.disabled || locked()) return;
+    if (!target || target.disabled) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
     target.classList.add('drag-over');
@@ -862,7 +1011,7 @@
   document.addEventListener('dragleave',event => event.target.closest('[data-zone]')?.classList.remove('drag-over'));
   document.addEventListener('drop',event => {
     const target = event.target.closest('[data-zone]');
-    if (!target || target.disabled || locked()) return;
+    if (!target || target.disabled) return;
     event.preventDefault();
     target.classList.remove('drag-over');
     const value = Number(event.dataTransfer.getData('text/plain'));
@@ -879,10 +1028,10 @@
         ['INPUT','TEXTAREA','SELECT','A'].includes(document.activeElement?.tagName)) return;
     if (event.key === 'Enter' && !active() && (document.activeElement?.tagName !== 'BUTTON' || document.activeElement?.id === 'deal-btn')) { event.preventDefault(); void deal(); return; }
     const action = ultimate()
-      ? {c:'check',f:'fold',1:'play1',2:'play2',3:'play3',4:'play4'}[event.key.toLowerCase()]
+      ? {c:'check',f:'fold',1:'play1',2:'play2',4:'play4'}[event.key.toLowerCase()]
       : {h:'hit',s:'stand',d:'double',p:'split',n:'decline',i:'insurance'}[event.key.toLowerCase()];
     const legal = ultimate() ? E.ultimateActions(state.round,state.balance) : E.blackjackActions(state.round,state.balance);
-    if (action && legal.includes(action)) { event.preventDefault(); void act(action); }
+    if (action && legal.includes(action) && !draftAmount()) { event.preventDefault(); void act(action); }
   });
 
   syncInputs();
