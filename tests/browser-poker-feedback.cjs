@@ -25,7 +25,7 @@ async function run() {
     await cdp.send('Page.navigate',{url});
     await cdp.waitFor(`document.readyState === 'complete' && !!window.CasinoEngine`);
     await fixture('AS QD AH QC 2S 3H 7D 8C 9S');
-    await cdp.waitFor(`!!document.querySelector('.payout-win')`,'winning payout');
+    await cdp.waitFor(`!!document.querySelector('.payout-win') && !!document.querySelector('.payout-loss') && !!document.querySelector('.payout-return')`,'mixed payout flights');
     assert.equal(await cdp.evaluate(`document.querySelectorAll('#dealer-hand .house-card').length`),2);
     const during = await cdp.evaluate(`(() => ({kinds:[...document.querySelectorAll('.payout-stack')].map(e=>e.className),locked:document.querySelector('#deal-btn').disabled,balance:document.querySelector('#balance').textContent,round:JSON.parse(localStorage.getItem('clubRoyaleCasino.v1')).round}))()`);
     assert.ok(during.kinds.some(c=>c.includes('payout-loss')),'Losing Trips travels to house');
@@ -67,11 +67,11 @@ async function run() {
         return {overlap:getComputedStyle(caption).display!=='none' && a.left<b.right && a.right>b.left && a.top<b.bottom && a.bottom>b.top,
           resultOverlap:getComputedStyle(caption).display!=='none' && a.left<r.right && a.right>r.left && a.top<r.bottom && a.bottom>r.top,
           cards:[...document.querySelectorAll('.house-card')].map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y+scrollY,right:r.right,bottom:r.bottom+scrollY};}),
-          fits:document.documentElement.scrollWidth<=innerWidth};
+          fits:document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight};
       })()`);
       assert.equal(layout.overlap,false,`${width}x${height}: dealer caption clears community cards`);
       assert.equal(layout.resultOverlap,false,`${width}x${height}: dealer caption clears result`);
-      assert.equal(layout.fits,true,`${width}x${height}: no horizontal scrolling`);
+      assert.equal(layout.fits,true,`${width}x${height}: no scrolling`);
       const pageHeight=await cdp.evaluate('document.documentElement.scrollHeight');
       for (const card of layout.cards) assert.ok(card.x>=0 && card.y>=0 && card.right<=width && card.bottom<=pageHeight,'Raised cards fit');
       if (width===360 || width===1365) await cdp.screenshot(`ultimate-feedback-${width}x${height}.png`);

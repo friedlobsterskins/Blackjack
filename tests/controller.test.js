@@ -187,6 +187,24 @@ test('bankroll resets accept custom starting amounts and clear session history',
   assert.equal(app.state().balance,1000);
 });
 
+test('the chip reserve grows with the available bankroll and withholds uncollected winnings', async () => {
+  const engine = { ...E, makeDeck: () => [...E.makeDeck(6), ...shoe('AS 9H KC 7D')] };
+  const app = browser(undefined,engine);
+  const height = () => Number(app.node('bankroll-stack').attributes.get('data-stack-height'));
+  const available = () => Number(app.node('bankroll-stack').attributes.get('data-balance'));
+  const initialHeight = height();
+  app.click({action:'deal'});
+  assert.equal(available(),9975);
+  assert.ok(height()<initialHeight);
+  await app.flush();
+  assert.equal(available(),10037.5);
+  assert.ok(height()>initialHeight);
+  app.node('starting-amount').value='1000';
+  app.click({action:'reset-bankroll'});
+  assert.equal(available(),1000);
+  assert.ok(height()<initialHeight);
+});
+
 test('reload settles an unpaid terminal round once, then preserves paid balance and history', () => {
   const round = E.createBlackjack(25, shoe('10S 10H 8D 7C'));
   E.actBlackjack(round, 'stand');

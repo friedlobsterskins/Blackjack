@@ -64,7 +64,7 @@ async function run() {
     for(const [width,height] of [[1365,768],[390,844],[844,390]]) {
       await cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<651});
       assert.equal(await cdp.evaluate(`document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight`),true,'Embedded page fits '+width+'x'+height);
-      assert.equal(await frame(`document.documentElement.scrollWidth<=innerWidth`),true,'Game scrolls vertically within its iframe at '+width+'x'+height);
+      assert.equal(await frame(`document.documentElement.scrollWidth<=innerWidth&&document.documentElement.scrollHeight<=innerHeight`),true,'Game fits without scrolling inside its iframe at '+width+'x'+height);
       const visible = await frame(`Array.from(document.querySelectorAll('#dealer-hand .card,#community-hand .card,#player-hands .card,#game-actions button')).every(el=>{
         const r=el.getBoundingClientRect();return r.x>=-1&&r.y+scrollY>=-1&&r.right<=innerWidth+1&&r.bottom+scrollY<=document.documentElement.scrollHeight+1;
       })`);

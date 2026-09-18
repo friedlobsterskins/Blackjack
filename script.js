@@ -13,7 +13,7 @@
   const cents = value => Math.round(value * 100) / 100;
   const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const delay = ms => new Promise(resolve => setTimeout(resolve, reducedMotion.matches ? 0 : ms));
+  const delay = ms => new Promise(resolve => setTimeout(resolve, reducedMotion.matches ? 0 : Math.round(ms * 1.3)));
   const fresh = (startingAmount = 10000) => ({ version: 1, startingAmount, balance: startingAmount, game: 'blackjack', bets: { blackjack: 25, ultimate: 25, trips: 0 }, net: 0, hands: 0, history: [], shoe: [], round: null, sound: false, chips:{blackjack:[25],ante:[25],trips:[]} });
   let state = load();
   let busy = false;
@@ -416,7 +416,9 @@
     const pending = busy && state.round?.phase === 'settled' && state.round.paid;
     const visibleNet = state.net - (pending ? cents(state.round.returned - state.round.wagered) : 0);
     const records = pending ? state.history.slice(1) : state.history;
-    $('balance').textContent = cash(state.balance - (pending ? state.round.returned - (view?.collected || 0) : 0));
+    const available = state.balance - (pending ? state.round.returned - (view?.collected || 0) : 0);
+    $('balance').textContent = cash(available);
+    renderBankroll(available);
     $('session-net').textContent = signed(visibleNet);
     $('session-net').className = visibleNet > 0 ? 'positive' : visibleNet < 0 ? 'negative' : '';
     $('session-hands').textContent = (state.hands - (pending ? 1 : 0)).toLocaleString();
@@ -624,7 +626,7 @@
     }
   }
 
-  const CHIP_COLORS = { 5:'#ab5549', 25:'#4c865b', 50:'#3c7182', 100:'#313b36', 500:'#8c6da1' };
+  const CHIP_COLORS = { 5:'#b85848', 25:'#398763', 50:'#397dba', 100:'#263a40', 500:'#9270b5', 1000:'#d2a449', 10000:'#b4bec8', 100000:'#d2974f' };
 
   function chipTotal(chips) { return cents(chips.reduce((sum,n) => sum+n,0)); }
   function makeChips(amount) {
@@ -686,11 +688,24 @@
 
   function chipStack(amount, chips) {
     if (!amount) return '';
-    const pieces = matchingChips(chips,amount);
-    const pileSize = Math.max(12,Math.ceil(pieces.length/4));
+    // Keep each placed chip, but always seat large values beneath small ones.
+    const pieces = matchingChips(chips,amount).sort((a,b) => b-a);
+    const pileSize = Math.max(8,Math.ceil(pieces.length/4));
     const piles = [];
     for (let i = 0; i < pieces.length; i += pileSize) piles.push(pieces.slice(i,i+pileSize));
-    return '<span class="coin-group" data-chip-count="' + pieces.length + '" aria-hidden="true">' + piles.map(pile => '<span class="coin-pile" style="--stack-step:' + Math.min(4,30/Math.max(1,pile.length-1)) + 'px">' + pile.map((denomination,i) => '<span class="table-chip" style="--chip-color:' + (CHIP_COLORS[denomination] || '#94794c') + ';--level:' + i + '"><span>' + compact(denomination) + '</span></span>').join('') + '</span>').join('') + '</span>';
+    return '<span class="coin-group" data-chip-count="' + pieces.length + '" aria-hidden="true">' + piles.map(pile => '<span class="coin-pile" style="--stack-step:' + Math.min(6,42/Math.max(1,pile.length-1)) + 'px">' + pile.map((denomination,i) => '<span class="table-chip" data-denomination="' + denomination + '" style="--chip-color:' + (CHIP_COLORS[denomination] || '#94794c') + ';--level:' + i + '"><span>' + (denomination >= 1000 ? '$' + denomination/1000 + 'k' : compact(denomination)) + '</span></span>').join('') + '</span>').join('') + '</span>';
+  }
+
+  function renderBankroll(amount) {
+    const rack = $('bankroll-stack');
+    // An illustrative reserve, proportional to the balance rather than a
+    // denomination breakdown (making change must never make a loss look bigger).
+    const height = Math.min(42,Math.log2(1 + Math.max(0,amount)/250) * 5);
+    const tiers = Math.ceil(height/4);
+    rack.setAttribute('aria-label',cash(amount) + ' available in your chip reserve');
+    rack.setAttribute('data-balance',String(cents(amount)));
+    rack.setAttribute('data-stack-height',String(height));
+    rack.innerHTML = [500,100,25].map((denomination,pile) => '<span class="reserve-pile" style="--reserve-rise:' + Math.max(0,height-pile*2) + 'px">' + Array.from({length:Math.max(0,tiers-pile)},(_,i) => '<span class="reserve-chip" style="--chip-color:' + CHIP_COLORS[denomination] + ';--reserve-level:' + (i/Math.max(1,tiers-pile-1)) + '"></span>').join('') + '</span>').join('');
   }
 
   function wagerCircle(zone, label, amount, options = {}) {
@@ -761,7 +776,7 @@
       return { x:rect.left + rect.width/2, y:rect.top + rect.height/2 };
     };
     const house = center($('dealer-hand'));
-    const player = center(document.querySelector('.chip-selector'));
+    const player = center($('bankroll-stack'));
     async function travel(amount, from, to, wait, kind, chips) {
       const stack = document.createElement('span');
       stack.className = 'payout-stack payout-' + kind;
@@ -774,9 +789,16 @@
         {transform:'translate(-50%,-50%) scale(.8)',opacity:0},
         {transform:'translate(calc(-50% + ' + dx*.35 + 'px),calc(-50% + ' + (dy*.35-24) + 'px)) rotate(-8deg) scale(1.08)',opacity:1,offset:.4},
         {transform:'translate(calc(-50% + ' + dx + 'px),calc(-50% + ' + dy + 'px)) rotate(8deg) scale(.8)',opacity:kind === 'win' ? 1 : 0}
-      ],{duration:kind === 'win' ? 420 : 580,delay:wait,easing:'cubic-bezier(.22,.7,.3,1)',fill:'both'});
+      ],{duration:kind === 'win' ? 950 : 1100,delay:wait,easing:'cubic-bezier(.22,.7,.3,1)',fill:'both'});
       try { await animation.finished; } catch { /* Cancelled visual effects do not affect settlement. */ }
-      finally { stack.remove(); }
+      if (kind === 'win') {
+        animation.cancel();
+        stack.style.left = to.x + 'px';
+        stack.style.top = to.y + 'px';
+        stack.classList.add('payout-beside');
+        return stack;
+      }
+      stack.remove();
     }
     try {
       const lines = ultimate() ? round.breakdown : round.hands.map((hand,i) => ({...hand,label:'blackjack',index:i})).concat(round.insurance.bet ? [{...round.insurance,label:'insurance'}] : []);
@@ -791,28 +813,30 @@
         };
         if (line.returned > line.bet) {
           const profit = cents(line.returned-line.bet);
-          const paidChips = matchingChips(round.chips?.[key],line.bet);
-          const additions = makeChips(profit);
-          // Pay onto the actual wager, keeping its original chips underneath.
-          let displayed = line.bet;
-          for (let i = 0; i < additions.length; i++) {
-            await travel(additions[i],house,spot,i === 0 ? index*80 : 0,'win');
-            paidChips.push(additions[i]);
-            displayed = cents(displayed + additions[i]);
-            zone.querySelector('.coin-group').outerHTML = chipStack(displayed,paidChips);
-            zone.querySelector('.zone-value').textContent = compact(displayed);
-            zone.dataset.paidAmount = displayed;
-            sound('chip');
-          }
-          await delay(320);
+          const original = matchingChips(round.chips?.[key],line.bet);
+          const winnings = profit === line.bet ? original : makeChips(profit);
+          const rect = zone.getBoundingClientRect();
+          const table = $('table').getBoundingClientRect();
+          // Pay the whole profit beside the untouched wager, then collect both.
+          const offset = Math.min(rect.width * .58,75);
+          const beside = {x:spot.x + (spot.x+offset+24 < table.right ? offset : -offset), y:spot.y};
+          const paid = await travel(profit,house,beside,index*180,'win',winnings);
+          paid.dataset.amount = profit;
+          zone.dataset.paidAmount = profit;
+          sound('chip');
+          await delay(950);
           clearChips();
-          await travel(line.returned,spot,player,70,'return',paidChips);
+          paid.remove();
+          await Promise.all([travel(line.bet,spot,player,0,'return',original),travel(profit,beside,player,100,'return',winnings)]);
         } else {
+          await delay(650 + index*140);
           clearChips();
-          await travel(line.bet,spot,line.returned ? player : house,index*80,line.returned ? 'return' : 'loss');
+          await travel(line.bet,spot,line.returned ? player : house,0,line.returned ? 'return' : 'loss',round.chips?.[key]);
         }
         view.collected = cents((view.collected || 0) + line.returned);
-        $('balance').textContent = cash(state.balance-round.returned+view.collected);
+        const available = state.balance-round.returned+view.collected;
+        $('balance').textContent = cash(available);
+        renderBankroll(available);
       }));
     } finally { layer.remove(); }
   }

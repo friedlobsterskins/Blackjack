@@ -57,6 +57,7 @@ async function run() {
       await cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<651});
       await cdp.evaluate('window.scrollTo(0,0)');
       const pageHeight = await cdp.evaluate('document.documentElement.scrollHeight');
+      assert.ok(pageHeight<=height,`No vertical scrolling at ${width}x${height}`);
       const boxes = await cdp.evaluate(`(() => {
         const selectors = ['.topbar','.control-deck','#game-actions','#wager-total','.chip-selector','.dealer-zone','#community-hand','.player-zone','[data-zone="trips"]','[data-zone="ante"]','[data-zone="blind"]','[data-zone="play"]'];
         return selectors.map(selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {selector,x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};});
@@ -86,7 +87,7 @@ async function run() {
       await cdp.screenshot('immersive-blackjack-'+width+'x'+height+'.png');
     }
     assert.deepEqual(errors,[]);
-    console.log('PASS Six viewport sizes, all controls reachable by vertical scrolling, manual Play-circle confirmation and Rebet.');
+    console.log('PASS Six viewport sizes without scrolling, manual Play-circle confirmation and Rebet.');
   } finally { await session.close(); }
 }
 run().catch(error=>{console.error(error);process.exitCode=1;});

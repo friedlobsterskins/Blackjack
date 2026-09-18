@@ -62,8 +62,9 @@ async function run() {
       });
       return {rects,actions,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,scrollY:pageY};
     })()`);
-    for(const r of result.rects) assert.ok(r.x>=-1&&r.y+result.scrollY>=-1&&r.right<=width+1&&r.bottom+result.scrollY<=result.scrollHeight+1,`${label} ${width}x${height}: ${r.selector} fits (${JSON.stringify(r)})`);
+    for(const r of result.rects) assert.ok(r.x>=-1&&r.y>=-1&&r.right<=width+1&&r.bottom<=height+1,`${label} ${width}x${height}: ${r.selector} fits (${JSON.stringify(r)})`);
     assert.ok(result.scrollWidth<=width,`${label} ${width}x${height}: no horizontal scroll`);
+    assert.ok(result.scrollHeight<=height && result.scrollY===0,`${label} ${width}x${height}: no vertical scroll`);
     assert.ok(result.actions.length>0,label+': actions are visible');
     for(const action of result.actions) assert.equal(action.reachable,true,label+': action not covered: '+action.label);
   }

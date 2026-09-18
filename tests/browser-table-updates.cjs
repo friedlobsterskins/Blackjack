@@ -50,18 +50,18 @@ async function run() {
       await cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<651});
       const layout = await cdp.evaluate(`(() => {
         const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
-        return {overflow:document.documentElement.scrollWidth>innerWidth,table:rect(document.querySelector('#table')),zones:Object.fromEntries([...document.querySelectorAll('[data-zone]')].map(e=>[e.dataset.zone,rect(e)])),paytable:rect(document.querySelector('#table-paytable')),community:rect(document.querySelector('.community-zone')),cards:[...document.querySelectorAll('#community-hand .card')].map(rect)};
+        return {overflow:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,table:rect(document.querySelector('#table')),zones:Object.fromEntries([...document.querySelectorAll('[data-zone]')].map(e=>[e.dataset.zone,rect(e)])),paytable:rect(document.querySelector('#table-paytable')),community:rect(document.querySelector('.community-zone')),cards:[...document.querySelectorAll('#community-hand .card')].map(rect)};
       })()`);
-      assert.equal(layout.overflow,false,`No horizontal scroll at ${width}`);
-      assert.ok(layout.table.height>=600,'Felt keeps enough vertical room');
+      assert.equal(layout.overflow,false,`No scrolling at ${width}x${height}`);
+      assert.ok(layout.table.bottom<=height,'Felt fits the available screen');
       assert.ok(layout.paytable.width>0,'Ratios stay visible on the felt');
-      assert.ok(layout.zones.trips.bottom < layout.zones.play.y);
-      assert.ok(layout.zones.play.bottom < layout.zones.ante.y);
+      assert.ok(layout.zones.trips.bottom < layout.zones.ante.y);
+      assert.ok(layout.zones.ante.bottom < layout.zones.play.y);
       assert.ok(Math.abs(layout.zones.play.x-layout.zones.ante.x)<1);
       assert.ok(layout.cards.every(c=>c.x>=layout.table.x && c.right<=layout.table.right));
       const a=layout.paytable,b=layout.community;
-      assert.ok(a.right<=b.x || b.right<=a.x || a.bottom<=b.y || b.bottom<=a.y,`Payout text clears community cards at ${width}`);
       await cdp.screenshot(`updated-ultimate-${width}x${height}.png`);
+      assert.ok(a.right<=b.x || b.right<=a.x || a.bottom<=b.y || b.bottom<=a.y,`Payout text clears community cards at ${width}: ${JSON.stringify({a,b})}`);
     }
     console.log('PASS Physical chip stacks, visible limits/payouts, vertically aligned betting circles at six sizes.');
 
@@ -104,12 +104,19 @@ async function run() {
     await cdp.click('[data-action="play4"]');
     await cdp.waitFor(`!!document.querySelector('[data-paid-amount]')`);
     assert.equal(await cdp.evaluate(`document.querySelector('#deal-btn').disabled`),true);
-    assert.ok(await cdp.evaluate(`[...document.querySelectorAll('[data-paid-amount]')].some(e=>Number(e.querySelector('.coin-group').dataset.chipCount)>=2)`));
+    const payment = await cdp.evaluate(`(() => {
+      const wager=document.querySelector('[data-paid-amount]'),paid=document.querySelector('.payout-beside');
+      const a=wager.querySelector('.coin-group').getBoundingClientRect(),b=paid.getBoundingClientRect();
+      return {profit:Number(paid.dataset.amount),original:[...wager.querySelectorAll('.table-chip')].reduce((s,e)=>s+Number(e.dataset.denomination),0),separate:Math.abs(a.x+a.width/2-b.x-b.width/2)>20,reserve:Number(document.querySelector('#bankroll-stack').dataset.balance)};
+    })()`);
+    assert.ok(payment.profit>0 && payment.original>0 && payment.separate,'Profit is a whole stack beside an unchanged wager');
+    assert.ok(payment.reserve<10120,'Reserve excludes chips still on the felt');
     await cdp.screenshot('updated-growing-payout.png');
     await cdp.waitFor(`!document.querySelector('#deal-btn').disabled`);
     assert.equal((await saved()).balance,10120);
     assert.equal(await cdp.evaluate(`document.querySelector('#balance').textContent`),'$10,120.00');
-    console.log('PASS Winnings grow the wager stack before collection and the wallet reconciles exactly.');
+    assert.equal(await cdp.evaluate(`Number(document.querySelector('#bankroll-stack').dataset.balance)`),10120);
+    console.log('PASS Whole winnings stacks land beside original wagers, then return to the exact wallet and reserve.');
 
     await cdp.click('#bankroll-btn');
     await cdp.click('[data-amount="1000"]');

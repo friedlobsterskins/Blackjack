@@ -23,7 +23,7 @@
         <button class="game-tab" id="tab-ultimate" data-game="ultimate" aria-pressed="false"><span aria-hidden="true">♦</span> <span class="uth-long">Ultimate Texas Hold’em</span><span class="uth-short">Ultimate Hold’em</span></button>
       </nav>
       <div class="header-tools">
-        <div class="wallet"><span class="wallet-symbol" aria-hidden="true">◈</span><div><span class="eyebrow">YOUR CHIPS <span class="free-label">FREE PLAY</span></span><strong id="balance">$10,000.00</strong></div><button id="bankroll-btn" class="wallet-add" aria-label="Manage or reset your chips" title="Manage or reset your chips">⚙</button></div>
+        <div class="wallet"><div id="bankroll-stack" class="bankroll-stack" role="img" aria-label="Your available chips"></div><div><span class="eyebrow">YOUR CHIPS <span class="free-label">FREE PLAY</span></span><strong id="balance">$10,000.00</strong></div><button id="bankroll-btn" class="wallet-add" aria-label="Manage or reset your chips" title="Manage or reset your chips">⚙</button></div>
         <button id="fullscreen-btn" class="fullscreen-button" aria-label="Enter fullscreen" aria-pressed="false" title="Enter fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>Fullscreen</span></button>
       </div>
     </header>
@@ -32,7 +32,7 @@
       <div id="table" class="table blackjack-table">
         <div class="felt-grain" aria-hidden="true"></div><div class="felt-line" aria-hidden="true"></div>
         <div class="table-topline"><span><i class="live-dot"></i> <span id="table-name">BLACKJACK</span> <small id="table-number">TABLE 01</small></span><div class="table-tools"><button id="quick-guide" class="text-button" data-open="guide">How to play</button><button class="text-button" data-open="history" title="Session history"><span aria-hidden="true">↺</span> History</button><button class="text-button" data-open="rules">Rules &amp; payouts</button><button id="sound-btn" class="icon-button" aria-label="Turn sound on" aria-pressed="false" title="Turn sound on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path id="sound-waves" d="m16 9 6 6m0-6-6 6"/></svg></button></div></div>
-        <div id="felt-limit" class="table-limits">TABLE LIMITS ? $25 ? $2,000</div><div id="round-stage" class="round-stage" aria-label="Hand progress"></div>
+        <div id="felt-limit" class="table-limits">TABLE LIMITS · $25 – $2,000</div><div id="round-stage" class="round-stage" aria-label="Hand progress"></div>
         <div class="shoe-prop" aria-hidden="true"><div class="shoe-card">♠</div></div>
         <div class="chip-rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         
